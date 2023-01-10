@@ -1,29 +1,18 @@
+.PHONY: proto build test deps
 export GOPRIVATE=github.com/anytypeio
-
-ifndef $(GOPATH)
-    GOPATH=$(shell go env GOPATH)
-    export GOPATH
-endif
-
-ifndef $(GOROOT)
-    GOROOT=$(shell go env GOROOT)
-    export GOROOT
-endif
-
-export PATH=$(GOPATH)/bin:$(shell echo $$PATH)
+export PATH:=deps:$(PATH)
 
 proto:
-	$(MAKE) -C consensus proto
-	$(MAKE) -C client proto
+	protoc --gogofaster_out=:. --go-drpc_out=protolib=github.com/gogo/protobuf:. consensusproto/protos/*.proto
 
 build:
-	$(MAKE) -C node build
-	$(MAKE) -C filenode build
-	$(MAKE) -C consensus build
-	$(MAKE) -C client build
+	@$(eval FLAGS := $$(shell govvv -flags -pkg github.com/anytypeio/any-sync/app))
+	go build -v -o bin/any-sync-consensusnode -ldflags "$(FLAGS)" github.com/anytypeio/any-sync-consensusnode/cmd
 
 test:
-	$(MAKE) -C node test
-	$(MAKE) -C filenode test
-	$(MAKE) -C consensus test
-	$(MAKE) -C client test
+	go test ./... --cover
+
+deps:
+	go mod download
+	go build -o deps/protoc-gen-go-drpc storj.io/drpc/cmd/protoc-gen-go-drpc
+	go build -o deps/protoc-gen-gogofaster github.com/gogo/protobuf/protoc-gen-gogofaster

@@ -22,9 +22,6 @@ debug.json
 # Golang vendor folder
 vendor
 
-# database
-db
-
 # artefacts for Intelli-J fleet
 .fleet
 
