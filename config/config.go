@@ -1,12 +1,11 @@
 package config
 
 import (
-	commonaccount "github.com/anytypeio/any-sync/accountservice"
-	"github.com/anytypeio/any-sync/app"
-	"github.com/anytypeio/any-sync/app/logger"
-	"github.com/anytypeio/any-sync/metric"
-	"github.com/anytypeio/any-sync/net"
-	"gopkg.in/yaml.v3"
+	commonaccount "github.com/anyproto/any-sync/accountservice"
+	"github.com/anyproto/any-sync/app"
+	"github.com/anyproto/any-sync/app/logger"
+	"github.com/anyproto/any-sync/metric"
+	"github.com/anyproto/any-sync/net"
 	"os"
 )
 

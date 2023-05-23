@@ -1,7 +1,7 @@
 package stream
 
 import (
-	consensus "github.com/anytypeio/any-sync-consensusnode"
+	consensus "github.com/anyproto/any-sync-consensusnode"
 	"sync"
 )
 

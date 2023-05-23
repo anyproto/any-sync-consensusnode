@@ -2,13 +2,12 @@ package stream
 
 import (
 	"context"
-	consensus "github.com/anytypeio/any-sync-consensusnode"
-	"github.com/anytypeio/any-sync-consensusnode/db"
-	"github.com/anytypeio/any-sync/app"
-	"github.com/anytypeio/any-sync/app/logger"
-	"github.com/anytypeio/any-sync/app/ocache"
-	"github.com/anytypeio/any-sync/metric"
-	"github.com/cheggaaa/mb/v3"
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/db"
+	"github.com/anyproto/any-sync/app"
+	"github.com/anyproto/any-sync/app/logger"
+	"github.com/anyproto/any-sync/app/ocache"
+	"github.com/anyproto/any-sync/metric"
 	"github.com/mr-tron/base58"
 	"go.uber.org/zap"
 	"sync/atomic"
@@ -48,10 +47,8 @@ type service struct {
 
 func (s *service) Init(a *app.App) (err error) {
 	s.db = a.MustComponent(db.CName).(db.Service)
-
 	cacheOpts := []ocache.Option{
 		ocache.WithTTL(cacheTTL),
-		ocache.WithRefCounter(false),
 		ocache.WithLogger(log.Named("cache").Sugar()),
 	}
 	if ms := a.Component(metric.CName); ms != nil {

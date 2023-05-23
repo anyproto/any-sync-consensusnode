@@ -2,8 +2,7 @@ package consensusclient
 
 import (
 	"context"
-	"github.com/anytypeio/any-sync-consensusnode/consensusproto"
-	"github.com/cheggaaa/mb/v3"
+	"github.com/anyproto/any-sync-consensusnode/consensusproto"
 	"sync"
 )
 

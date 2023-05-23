@@ -2,10 +2,10 @@ package db
 
 import (
 	"context"
-	consensus "github.com/anytypeio/any-sync-consensusnode"
-	"github.com/anytypeio/any-sync-consensusnode/config"
-	"github.com/anytypeio/any-sync-consensusnode/consensusproto/consensuserr"
-	"github.com/anytypeio/any-sync/app"
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/config"
+	"github.com/anyproto/any-sync-consensusnode/consensusproto/consensuserr"
+	"github.com/anyproto/any-sync/app"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"

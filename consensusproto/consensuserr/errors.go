@@ -2,8 +2,8 @@ package consensuserr
 
 import (
 	"fmt"
-	"github.com/anytypeio/any-sync-consensusnode/consensusproto"
-	"github.com/anytypeio/any-sync/net/rpc/rpcerr"
+	"github.com/anyproto/any-sync-consensusnode/consensusproto"
+	"github.com/anyproto/any-sync/net/rpc/rpcerr"
 )
 
 var (

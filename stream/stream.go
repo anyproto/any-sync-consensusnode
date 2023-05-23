@@ -2,8 +2,7 @@ package stream
 
 import (
 	"context"
-	consensus "github.com/anytypeio/any-sync-consensusnode"
-	"github.com/cheggaaa/mb/v3"
+	consensus "github.com/anyproto/any-sync-consensusnode"
 	"go.uber.org/zap"
 	"sync"
 )

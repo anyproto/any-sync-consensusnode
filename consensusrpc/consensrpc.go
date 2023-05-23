@@ -2,13 +2,13 @@ package consensusrpc
 
 import (
 	"context"
-	consensus "github.com/anytypeio/any-sync-consensusnode"
-	"github.com/anytypeio/any-sync-consensusnode/consensusproto"
-	"github.com/anytypeio/any-sync-consensusnode/consensusproto/consensuserr"
-	"github.com/anytypeio/any-sync-consensusnode/db"
-	"github.com/anytypeio/any-sync-consensusnode/stream"
-	"github.com/anytypeio/any-sync/app"
-	"github.com/anytypeio/any-sync/net/rpc/server"
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/consensusproto"
+	"github.com/anyproto/any-sync-consensusnode/consensusproto/consensuserr"
+	"github.com/anyproto/any-sync-consensusnode/db"
+	"github.com/anyproto/any-sync-consensusnode/stream"
+	"github.com/anyproto/any-sync/app"
+	"github.com/anyproto/any-sync/net/rpc/server"
 	"storj.io/drpc/drpcerr"
 	"time"
 )

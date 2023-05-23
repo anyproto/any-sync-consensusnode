@@ -1,12 +1,12 @@
 package account
 
 import (
-	commonaccount "github.com/anytypeio/any-sync/accountservice"
-	"github.com/anytypeio/any-sync/app"
-	"github.com/anytypeio/any-sync/commonspace/object/accountdata"
-	"github.com/anytypeio/any-sync/util/keys"
-	"github.com/anytypeio/any-sync/util/keys/asymmetric/encryptionkey"
-	"github.com/anytypeio/any-sync/util/keys/asymmetric/signingkey"
+	commonaccount "github.com/anyproto/any-sync/accountservice"
+	"github.com/anyproto/any-sync/app"
+	"github.com/anyproto/any-sync/commonspace/object/accountdata"
+	"github.com/anyproto/any-sync/util/keys"
+	"github.com/anyproto/any-sync/util/keys/asymmetric/encryptionkey"
+	"github.com/anyproto/any-sync/util/keys/asymmetric/signingkey"
 )
 
 type service struct {
