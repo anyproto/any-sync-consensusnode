@@ -3,6 +3,7 @@ package stream
 import (
 	consensus "github.com/anyproto/any-sync-consensusnode"
 	"sync"
+	"time"
 )
 
 // object is a cache entry that holds the actual log state and maintains added streams
@@ -54,11 +55,14 @@ func (o *object) RemoveStream(id uint64) {
 	delete(o.streams, id)
 }
 
-// Locked indicates that object can be garbage collected
-func (o *object) Locked() bool {
+func (o *object) TryClose(ttl time.Duration) (ok bool, err error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return len(o.streams) > 0
+	if len(o.streams) > 0 {
+		return
+	} else {
+		return true, o.Close()
+	}
 }
 
 func (o *object) Close() (err error) {

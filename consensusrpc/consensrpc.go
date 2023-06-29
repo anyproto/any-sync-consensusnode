@@ -3,11 +3,11 @@ package consensusrpc
 import (
 	"context"
 	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/consensusproto"
-	"github.com/anyproto/any-sync-consensusnode/consensusproto/consensuserr"
 	"github.com/anyproto/any-sync-consensusnode/db"
 	"github.com/anyproto/any-sync-consensusnode/stream"
 	"github.com/anyproto/any-sync/app"
+	"github.com/anyproto/any-sync/consensus/consensusproto"
+	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"github.com/anyproto/any-sync/net/rpc/server"
 	"storj.io/drpc/drpcerr"
 	"time"
@@ -35,21 +35,21 @@ func (c *consensusRpc) Name() (name string) {
 	return CName
 }
 
-func (c *consensusRpc) AddLog(ctx context.Context, req *consensusproto.AddLogRequest) (*consensusproto.Ok, error) {
+func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddRequest) (*consensusproto.Ok, error) {
 	if err := c.db.AddLog(ctx, logFromProto(req.Log)); err != nil {
 		return nil, err
 	}
 	return &consensusproto.Ok{}, nil
 }
 
-func (c *consensusRpc) AddRecord(ctx context.Context, req *consensusproto.AddRecordRequest) (*consensusproto.Ok, error) {
+func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.RecordAddRequest) (*consensusproto.Ok, error) {
 	if err := c.db.AddRecord(ctx, req.LogId, recordFromProto(req.Record)); err != nil {
 		return nil, err
 	}
 	return &consensusproto.Ok{}, nil
 }
 
-func (c *consensusRpc) WatchLog(rpcStream consensusproto.DRPCConsensus_WatchLogStream) error {
+func (c *consensusRpc) LogWatch(rpcStream consensusproto.DRPCConsensus_LogWatchStream) error {
 	stream := c.stream.NewStream()
 	defer stream.Close()
 	go c.readStream(stream, rpcStream)
@@ -60,7 +60,7 @@ func (c *consensusRpc) WatchLog(rpcStream consensusproto.DRPCConsensus_WatchLogS
 		}
 		for _, rec := range recs {
 			if rec.Err == nil {
-				if err := rpcStream.Send(&consensusproto.WatchLogEvent{
+				if err := rpcStream.Send(&consensusproto.LogWatchEvent{
 					LogId:   rec.Id,
 					Records: recordsToProto(rec.Records),
 				}); err != nil {
@@ -71,7 +71,7 @@ func (c *consensusRpc) WatchLog(rpcStream consensusproto.DRPCConsensus_WatchLogS
 				if errCode == 0 {
 					errCode = consensusproto.ErrCodes(drpcerr.Code(consensuserr.ErrUnexpected))
 				}
-				if err := rpcStream.Send(&consensusproto.WatchLogEvent{
+				if err := rpcStream.Send(&consensusproto.LogWatchEvent{
 					LogId: rec.Id,
 					Error: &consensusproto.Err{
 						Error: errCode,
@@ -84,7 +84,7 @@ func (c *consensusRpc) WatchLog(rpcStream consensusproto.DRPCConsensus_WatchLogS
 	}
 }
 
-func (c *consensusRpc) readStream(st *stream.Stream, rpcStream consensusproto.DRPCConsensus_WatchLogStream) {
+func (c *consensusRpc) readStream(st *stream.Stream, rpcStream consensusproto.DRPCConsensus_LogWatchStream) {
 	defer st.Close()
 	for {
 		req, err := rpcStream.Recv()

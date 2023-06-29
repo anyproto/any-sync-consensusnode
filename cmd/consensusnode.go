@@ -11,9 +11,16 @@ import (
 	"github.com/anyproto/any-sync-consensusnode/stream"
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
+	"github.com/anyproto/any-sync/coordinator/coordinatorclient"
+	"github.com/anyproto/any-sync/coordinator/nodeconfsource"
 	"github.com/anyproto/any-sync/metric"
+	"github.com/anyproto/any-sync/net/peerservice"
+	"github.com/anyproto/any-sync/net/pool"
 	"github.com/anyproto/any-sync/net/rpc/server"
 	"github.com/anyproto/any-sync/net/secureservice"
+	"github.com/anyproto/any-sync/net/transport/yamux"
+	"github.com/anyproto/any-sync/nodeconf"
+	"github.com/anyproto/any-sync/nodeconf/nodeconfstore"
 	"go.uber.org/zap"
 	"net/http"
 	_ "net/http/pprof"
@@ -89,6 +96,13 @@ func main() {
 func Bootstrap(a *app.App) {
 	a.Register(metric.New()).
 		Register(account.New()).
+		Register(nodeconf.New()).
+		Register(nodeconfstore.New()).
+		Register(nodeconfsource.New()).
+		Register(coordinatorclient.New()).
+		Register(pool.New()).
+		Register(peerservice.New()).
+		Register(yamux.New()).
 		Register(secureservice.New()).
 		Register(server.New()).
 		Register(db.New()).

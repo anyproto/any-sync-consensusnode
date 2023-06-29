@@ -5,7 +5,10 @@ import (
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/metric"
-	"github.com/anyproto/any-sync/net"
+	"github.com/anyproto/any-sync/net/rpc"
+	"github.com/anyproto/any-sync/net/transport/yamux"
+	"github.com/anyproto/any-sync/nodeconf"
+	"gopkg.in/yaml.v3"
 	"os"
 )
 
@@ -24,11 +27,15 @@ func NewFromFile(path string) (c *Config, err error) {
 }
 
 type Config struct {
-	GrpcServer net.Config           `yaml:"grpcServer"`
-	Account    commonaccount.Config `yaml:"account"`
-	Mongo      Mongo                `yaml:"mongo"`
-	Metric     metric.Config        `yaml:"metric"`
-	Log        logger.Config        `yaml:"log"`
+	Drpc                     rpc.Config             `yaml:"drpc"`
+	Account                  commonaccount.Config   `yaml:"account"`
+	Network                  nodeconf.Configuration `yaml:"network"`
+	NetworkStorePath         string                 `yaml:"networkStorePath"`
+	NetworkUpdateIntervalSec int                    `yaml:"networkUpdateIntervalSec"`
+	Mongo                    Mongo                  `yaml:"mongo"`
+	Metric                   metric.Config          `yaml:"metric"`
+	Log                      logger.Config          `yaml:"log"`
+	Yamux                    yamux.Config           `yaml:"yamux"`
 }
 
 func (c *Config) Init(a *app.App) (err error) {
@@ -43,8 +50,8 @@ func (c Config) GetMongo() Mongo {
 	return c.Mongo
 }
 
-func (c Config) GetNet() net.Config {
-	return c.GrpcServer
+func (c Config) GetDrpc() rpc.Config {
+	return c.Drpc
 }
 
 func (c Config) GetAccount() commonaccount.Config {
@@ -53,4 +60,20 @@ func (c Config) GetAccount() commonaccount.Config {
 
 func (c Config) GetMetric() metric.Config {
 	return c.Metric
+}
+
+func (c Config) GetNodeConf() nodeconf.Configuration {
+	return c.Network
+}
+
+func (c Config) GetNodeConfStorePath() string {
+	return c.NetworkStorePath
+}
+
+func (c Config) GetNodeConfUpdateInterval() int {
+	return c.NetworkUpdateIntervalSec
+}
+
+func (c Config) GetYamux() yamux.Config {
+	return c.Yamux
 }

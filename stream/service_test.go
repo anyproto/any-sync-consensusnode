@@ -3,9 +3,9 @@ package stream
 import (
 	"context"
 	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/consensusproto/consensuserr"
 	"github.com/anyproto/any-sync-consensusnode/db"
 	"github.com/anyproto/any-sync/app"
+	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"

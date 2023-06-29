@@ -8,6 +8,7 @@ import (
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/app/ocache"
 	"github.com/anyproto/any-sync/metric"
+	"github.com/cheggaaa/mb/v3"
 	"github.com/mr-tron/base58"
 	"go.uber.org/zap"
 	"sync/atomic"
