@@ -22,6 +22,8 @@ import (
 	"github.com/anyproto/any-sync/nodeconf"
 	"github.com/anyproto/any-sync/nodeconf/nodeconfstore"
 	"go.uber.org/zap"
+	// import this to keep govvv in go.mod on mod tidy
+	_ "github.com/ahmetb/govvv/integration-test/app-different-package/mypkg"
 	"net/http"
 	_ "net/http/pprof"
 	"os"

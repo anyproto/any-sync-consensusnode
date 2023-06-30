@@ -3,10 +3,9 @@ module github.com/anyproto/any-sync-consensusnode
 go 1.19
 
 require (
+	github.com/ahmetb/govvv v0.3.0
 	github.com/anyproto/any-sync v0.2.11-0.20230629125247-59cf8b46fd0d
 	github.com/cheggaaa/mb/v3 v3.0.1
-	github.com/gogo/protobuf v1.3.2
-	github.com/golang/mock v1.6.0
 	github.com/mr-tron/base58 v1.2.0
 	github.com/stretchr/testify v1.8.4
 	go.mongodb.org/mongo-driver v1.10.3
@@ -27,6 +26,7 @@ require (
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
