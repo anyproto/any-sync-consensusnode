@@ -4,8 +4,12 @@ github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/ahmetb/govvv v0.3.0 h1:YGLGwEyiUwHFy5eh/RUhdupbuaCGBYn5T5GWXp+WJB0=
 github.com/ahmetb/govvv v0.3.0/go.mod h1:4WRFpdWtc/YtKgPFwa1dr5+9hiRY5uKAL08bOlxOR6s=
-github.com/anyproto/any-sync v0.2.11-0.20230629125247-59cf8b46fd0d h1:vGT/Iz0pO2qmBmCCrnw5HUen3Pt3wiKyOWok4E0iGxY=
-github.com/anyproto/any-sync v0.2.11-0.20230629125247-59cf8b46fd0d/go.mod h1:ZENGpUnGbJ8NUbMkoIYPXSTX4IlXaoSko+gqzk/6onc=
+github.com/anyproto/any-sync v0.2.11-0.20230703153631-0c1d752acf2a h1:oZfHHsW6o+PxUMHesR9ZJAFYY1qwYlvIxDuAfWkBhBc=
+github.com/anyproto/any-sync v0.2.11-0.20230703153631-0c1d752acf2a/go.mod h1:ZENGpUnGbJ8NUbMkoIYPXSTX4IlXaoSko+gqzk/6onc=
+github.com/anyproto/any-sync v0.2.11-0.20230705165014-cd3c6c736a85 h1:fwTAmIO+ivnFn6K+hsLEsH2NywkvLhygYxXMIFx3Klw=
+github.com/anyproto/any-sync v0.2.11-0.20230705165014-cd3c6c736a85/go.mod h1:ZENGpUnGbJ8NUbMkoIYPXSTX4IlXaoSko+gqzk/6onc=
+github.com/anyproto/any-sync v0.2.11-0.20230707092212-648aa15b55ae h1:pEIMdzfZs397qPWIHxcDNfPdTt8HOKU7u2ss4RgjxGU=
+github.com/anyproto/any-sync v0.2.11-0.20230707092212-648aa15b55ae/go.mod h1:ZENGpUnGbJ8NUbMkoIYPXSTX4IlXaoSko+gqzk/6onc=
 github.com/anyproto/go-chash v0.1.0 h1:I9meTPjXFRfXZHRJzjOHC/XF7Q5vzysKkiT/grsogXY=
 github.com/anyproto/go-chash v0.1.0/go.mod h1:0UjNQi3PDazP0fINpFYu6VKhuna+W/V+1vpXHAfNgLY=
 github.com/anyproto/go-slip10 v1.0.0 h1:uAEtSuudR3jJBOfkOXf3bErxVoxbuKwdoJN55M1i6IA=

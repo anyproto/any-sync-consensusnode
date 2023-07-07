@@ -9,7 +9,6 @@ import (
 	"github.com/anyproto/any-sync/app/ocache"
 	"github.com/anyproto/any-sync/metric"
 	"github.com/cheggaaa/mb/v3"
-	"github.com/mr-tron/base58"
 	"go.uber.org/zap"
 	"sync/atomic"
 	"time"
@@ -78,7 +77,7 @@ func (s *service) NewStream() *Stream {
 }
 
 // AddStream to object with given logId
-func (s *service) AddStream(ctx context.Context, logId []byte, stream *Stream) (err error) {
+func (s *service) AddStream(ctx context.Context, logId string, stream *Stream) (err error) {
 	obj, err := s.getObject(ctx, logId)
 	if err != nil {
 		return err
@@ -88,7 +87,7 @@ func (s *service) AddStream(ctx context.Context, logId []byte, stream *Stream) (
 }
 
 // RemoveStream from object with five logId
-func (s *service) RemoveStream(ctx context.Context, logId []byte, streamId uint64) (err error) {
+func (s *service) RemoveStream(ctx context.Context, logId string, streamId uint64) (err error) {
 	obj, err := s.getObject(ctx, logId)
 	if err != nil {
 		return err
@@ -97,7 +96,7 @@ func (s *service) RemoveStream(ctx context.Context, logId []byte, streamId uint6
 	return
 }
 
-func (s *service) loadLog(ctx context.Context, id string) (value ocache.Object, err error) {
+func (s *service) loadLog(ctx context.Context, logId string) (value ocache.Object, err error) {
 	if ctxLog := ctx.Value(ctxLogKey); ctxLog != nil {
 		return &object{
 			logId:   ctxLog.(consensus.Log).Id,
@@ -105,7 +104,6 @@ func (s *service) loadLog(ctx context.Context, id string) (value ocache.Object, 
 			streams: make(map[uint64]*Stream),
 		}, nil
 	}
-	logId := logIdFromString(id)
 	dbLog, err := s.db.FetchLog(ctx, logId)
 	if err != nil {
 		return nil, err
@@ -117,7 +115,7 @@ func (s *service) loadLog(ctx context.Context, id string) (value ocache.Object, 
 	}, nil
 }
 
-func (s *service) receiveChange(logId []byte, records []consensus.Record) {
+func (s *service) receiveChange(logId string, records []consensus.Record) {
 	ctx := context.WithValue(context.Background(), ctxLogKey, consensus.Log{Id: logId, Records: records})
 	obj, err := s.getObject(ctx, logId)
 	if err != nil {
@@ -127,9 +125,8 @@ func (s *service) receiveChange(logId []byte, records []consensus.Record) {
 	obj.AddRecords(records)
 }
 
-func (s *service) getObject(ctx context.Context, logId []byte) (*object, error) {
-	id := logIdToString(logId)
-	cacheObj, err := s.cache.Get(ctx, id)
+func (s *service) getObject(ctx context.Context, logId string) (*object, error) {
+	cacheObj, err := s.cache.Get(ctx, logId)
 	if err != nil {
 		return nil, err
 	}
@@ -138,13 +135,4 @@ func (s *service) getObject(ctx context.Context, logId []byte) (*object, error) 
 
 func (s *service) Close(ctx context.Context) (err error) {
 	return s.cache.Close()
-}
-
-func logIdToString(logId []byte) string {
-	return base58.Encode(logId)
-}
-
-func logIdFromString(s string) []byte {
-	logId, _ := base58.Decode(s)
-	return logId
 }

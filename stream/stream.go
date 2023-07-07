@@ -18,18 +18,18 @@ type Stream struct {
 }
 
 // LogIds returns watched log ids
-func (s *Stream) LogIds() [][]byte {
+func (s *Stream) LogIds() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	logIds := make([][]byte, 0, len(s.logIds))
+	logIds := make([]string, 0, len(s.logIds))
 	for logId := range s.logIds {
-		logIds = append(logIds, []byte(logId))
+		logIds = append(logIds, logId)
 	}
 	return logIds
 }
 
 // AddRecords adds new records to stream, called by objects
-func (s *Stream) AddRecords(logId []byte, records []consensus.Record) (err error) {
+func (s *Stream) AddRecords(logId string, records []consensus.Record) (err error) {
 	return s.mb.Add(context.TODO(), consensus.Log{Id: logId, Records: records})
 }
 
@@ -41,15 +41,14 @@ func (s *Stream) WaitLogs() []consensus.Log {
 }
 
 // WatchIds adds given ids to subscription
-func (s *Stream) WatchIds(ctx context.Context, logIds [][]byte) {
+func (s *Stream) WatchIds(ctx context.Context, logIds []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, logId := range logIds {
-		logIdKey := string(logId)
-		if _, ok := s.logIds[logIdKey]; !ok {
-			s.logIds[logIdKey] = struct{}{}
+		if _, ok := s.logIds[logId]; !ok {
+			s.logIds[logId] = struct{}{}
 			if addErr := s.s.AddStream(ctx, logId, s); addErr != nil {
-				log.Info("can't add stream for log", zap.Binary("logId", logId), zap.Error(addErr))
+				log.Info("can't add stream for log", zap.String("logId", logId), zap.Error(addErr))
 				_ = s.mb.Add(ctx, consensus.Log{
 					Id:  logId,
 					Err: addErr,
@@ -61,15 +60,14 @@ func (s *Stream) WatchIds(ctx context.Context, logIds [][]byte) {
 }
 
 // UnwatchIds removes given ids from subscription
-func (s *Stream) UnwatchIds(ctx context.Context, logIds [][]byte) {
+func (s *Stream) UnwatchIds(ctx context.Context, logIds []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, logId := range logIds {
-		logIdKey := string(logId)
-		if _, ok := s.logIds[logIdKey]; ok {
-			delete(s.logIds, logIdKey)
+		if _, ok := s.logIds[logId]; ok {
+			delete(s.logIds, logId)
 			if remErr := s.s.RemoveStream(ctx, logId, s.id); remErr != nil {
-				log.Warn("can't remove stream for log", zap.Binary("logId", logId), zap.Error(remErr))
+				log.Warn("can't remove stream for log", zap.String("logId", logId), zap.Error(remErr))
 			}
 		}
 	}
@@ -82,6 +80,6 @@ func (s *Stream) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for logId := range s.logIds {
-		_ = s.s.RemoveStream(context.TODO(), []byte(logId), s.id)
+		_ = s.s.RemoveStream(context.TODO(), logId, s.id)
 	}
 }
