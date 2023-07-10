@@ -10,6 +10,7 @@ import (
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/consensus/consensusproto"
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
+	"github.com/anyproto/any-sync/metric"
 	"github.com/anyproto/any-sync/net/peer"
 	"github.com/anyproto/any-sync/net/rpc/server"
 	"github.com/anyproto/any-sync/nodeconf"
@@ -34,6 +35,7 @@ type consensusRpc struct {
 	stream   stream.Service
 	nodeconf nodeconf.Service
 	account  accountservice.Service
+	metric   metric.Metric
 }
 
 func (c *consensusRpc) Init(a *app.App) (err error) {
@@ -41,6 +43,7 @@ func (c *consensusRpc) Init(a *app.App) (err error) {
 	c.stream = a.MustComponent(stream.CName).(stream.Service)
 	c.nodeconf = a.MustComponent(nodeconf.CName).(nodeconf.Service)
 	c.account = a.MustComponent(accountservice.CName).(accountservice.Service)
+	c.metric = a.MustComponent(metric.CName).(metric.Metric)
 	return consensusproto.DRPCRegisterConsensus(a.MustComponent(server.CName).(server.DRPCServer), c)
 }
 
@@ -48,13 +51,23 @@ func (c *consensusRpc) Name() (name string) {
 	return CName
 }
 
-func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddRequest) (*consensusproto.Ok, error) {
-	if err := c.checkClient(ctx); err != nil {
-		return nil, err
+func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddRequest) (resp *consensusproto.Ok, err error) {
+	st := time.Now()
+	defer func() {
+		c.metric.RequestLog(ctx, "consensus.logAdd",
+			metric.TotalDur(time.Since(st)),
+			zap.String("logId", req.Record.Id),
+			zap.Error(err),
+		)
+	}()
+
+	if err = c.checkClient(ctx); err != nil {
+		return
 	}
 
 	if !cidutil.VerifyCid(req.Record.Payload, req.Record.Id) {
-		return nil, consensuserr.ErrInvalidPayload
+		err = consensuserr.ErrInvalidPayload
+		return
 	}
 
 	// we don't sign the first record because it affects the id, but we sign the following records as a confirmation that the chain is valid and the record added from a valid source
@@ -68,13 +81,22 @@ func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddReq
 			},
 		},
 	}
-	if err := c.db.AddLog(ctx, l); err != nil {
-		return nil, err
+	if err = c.db.AddLog(ctx, l); err != nil {
+		return
 	}
 	return &consensusproto.Ok{}, nil
 }
 
-func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.RecordAddRequest) (res *consensusproto.RawRecordWithId, err error) {
+func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.RecordAddRequest) (resp *consensusproto.RawRecordWithId, err error) {
+	st := time.Now()
+	defer func() {
+		c.metric.RequestLog(ctx, "consensus.recordAdd",
+			metric.TotalDur(time.Since(st)),
+			zap.String("logId", req.LogId),
+			zap.Error(err),
+		)
+	}()
+
 	if err = c.checkClient(ctx); err != nil {
 		return
 	}
@@ -82,28 +104,32 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 	// unmarshal payload as a consensus record
 	rec := &consensusproto.Record{}
 	if e := rec.Unmarshal(req.Record.Payload); e != nil {
-		return nil, consensuserr.ErrInvalidPayload
+		err = consensuserr.ErrInvalidPayload
+		return
 	}
 
 	// sign a record
 	req.Record.AcceptorIdentity = c.account.Account().SignKey.GetPublic().Storage()
 	if req.Record.AcceptorSignature, err = c.account.Account().SignKey.Sign(req.Record.Payload); err != nil {
 		log.Warn("can't sign payload", zap.Error(err))
-		return nil, consensuserr.ErrUnexpected
+		err = consensuserr.ErrUnexpected
+		return
 	}
 
 	// marshal with identity and sign
 	payload, err := req.Record.Marshal()
 	if err != nil {
 		log.Warn("can't marshal payload", zap.Error(err))
-		return nil, consensuserr.ErrUnexpected
+		err = consensuserr.ErrUnexpected
+		return
 	}
 
 	// create id
 	id, err := cidutil.NewCidFromBytes(payload)
 	if err != nil {
 		log.Warn("can't make payload cid", zap.Error(err))
-		return nil, consensuserr.ErrUnexpected
+		err = consensuserr.ErrUnexpected
+		return
 	}
 
 	// add to db

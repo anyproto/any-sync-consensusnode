@@ -3,12 +3,14 @@ package consensusrpc
 import (
 	"context"
 	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/config"
 	"github.com/anyproto/any-sync-consensusnode/db"
 	"github.com/anyproto/any-sync-consensusnode/db/mock_db"
 	"github.com/anyproto/any-sync-consensusnode/stream"
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/consensus/consensusproto"
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
+	"github.com/anyproto/any-sync/metric"
 	"github.com/anyproto/any-sync/net/peer"
 	"github.com/anyproto/any-sync/net/rpc/rpctest"
 	"github.com/anyproto/any-sync/nodeconf"
@@ -238,6 +240,8 @@ func newFixture(t *testing.T) *fixture {
 		Register(fx.ts).
 		Register(fx.stream).
 		Register(&accounttest.AccountTestService{}).
+		Register(metric.New()).
+		Register(new(config.Config)).
 		Register(fx.consensusRpc)
 
 	recvCh := make(chan db.ChangeReceiver, 1)
