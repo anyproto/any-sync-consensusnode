@@ -171,11 +171,13 @@ func (sr *streamReader) read() {
 			return
 		}
 		for _, l := range logs {
-			if el, ok := sr.logs[string(l.Id)]; !ok {
-				sr.logs[string(l.Id)] = l
+			if el, ok := sr.logs[l.Id]; !ok {
+				sr.logs[l.Id] = l
 			} else {
-				el.Records = append(l.Records, el.Records...)
-				sr.logs[string(l.Id)] = el
+				rec := make([]consensus.Record, len(l.Records))
+				copy(rec, l.Records)
+				el.Records = append(rec, el.Records...)
+				sr.logs[l.Id] = el
 			}
 		}
 	}
