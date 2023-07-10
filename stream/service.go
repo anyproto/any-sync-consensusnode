@@ -49,7 +49,7 @@ func (s *service) Init(a *app.App) (err error) {
 	s.db = a.MustComponent(db.CName).(db.Service)
 	cacheOpts := []ocache.Option{
 		ocache.WithTTL(cacheTTL),
-		ocache.WithLogger(log.Named("cache").Sugar()),
+		ocache.WithLogger(log.Named(CName).Sugar()),
 	}
 	if ms := a.Component(metric.CName); ms != nil {
 		cacheOpts = append(cacheOpts, ocache.WithPrometheus(ms.(metric.Metric).Registry(), "consensus", "logcache"))

@@ -52,6 +52,11 @@ func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddReq
 	if err := c.checkClient(ctx); err != nil {
 		return nil, err
 	}
+
+	if !cidutil.VerifyCid(req.Record.Payload, req.Record.Id) {
+		return nil, consensuserr.ErrInvalidPayload
+	}
+
 	// we don't sign the first record because it affects the id, but we sign the following records as a confirmation that the chain is valid and the record added from a valid source
 	l := consensus.Log{
 		Id: req.Record.Id,

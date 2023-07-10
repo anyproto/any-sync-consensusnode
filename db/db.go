@@ -1,3 +1,4 @@
+//go:generate mockgen -destination mock_db/mock_db.go github.com/anyproto/any-sync-consensusnode/db Service
 package db
 
 import (
