@@ -8,7 +8,7 @@ import (
 
 // object is a cache entry that holds the actual log state and maintains added streams
 type object struct {
-	logId   []byte
+	logId   string
 	records []consensus.Record
 
 	streams map[uint64]*Stream

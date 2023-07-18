@@ -7,7 +7,7 @@ proto:
 
 build:
 	@$(eval FLAGS := $$(shell PATH=$(PATH) govvv -flags -pkg github.com/anyproto/any-sync/app))
-	go build -v -o bin/any-sync-consensusnode -ldflags "$(FLAGS)" github.com/anyproto/any-sync-consensusnode/cmd
+	go build -v -o bin/any-sync-consensusnode -ldflags "$(FLAGS) -X github.com/anyproto/any-sync/app.AppName=any-sync-consensusnode" github.com/anyproto/any-sync-consensusnode/cmd
 
 test:
 	go test ./... --cover

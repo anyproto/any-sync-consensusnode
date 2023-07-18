@@ -19,16 +19,16 @@ func TestService_NewStream(t *testing.T) {
 		fx := newFixture(t)
 		defer fx.Finish(t)
 
-		var expLogId = []byte("logId")
-		var preloadLogId = []byte("preloadId")
+		var expLogId = "logId"
+		var preloadLogId = "preloadId"
 
-		fx.mockDB.fetchLog = func(ctx context.Context, logId []byte) (log consensus.Log, err error) {
+		fx.mockDB.fetchLog = func(ctx context.Context, logId string) (log consensus.Log, err error) {
 			require.Equal(t, expLogId, logId)
 			return consensus.Log{
 				Id: logId,
 				Records: []consensus.Record{
 					{
-						Id: []byte{'1'},
+						Id: "1",
 					},
 				},
 			}, nil
@@ -36,51 +36,51 @@ func TestService_NewStream(t *testing.T) {
 
 		fx.mockDB.receiver(preloadLogId, []consensus.Record{
 			{
-				Id:     []byte{'2'},
-				PrevId: []byte{'1'},
+				Id:     "2",
+				PrevId: "1",
 			},
 			{
-				Id: []byte{'1'},
+				Id: "1",
 			},
 		})
 
 		st1 := fx.NewStream()
 		sr1 := readStream(st1)
 		assert.Equal(t, uint64(1), sr1.id)
-		st1.WatchIds(ctx, [][]byte{expLogId, preloadLogId})
-		st1.UnwatchIds(ctx, [][]byte{preloadLogId})
-		assert.Equal(t, [][]byte{expLogId}, st1.LogIds())
+		st1.WatchIds(ctx, []string{expLogId, preloadLogId})
+		st1.UnwatchIds(ctx, []string{preloadLogId})
+		assert.Equal(t, []string{expLogId}, st1.LogIds())
 
 		st2 := fx.NewStream()
 		sr2 := readStream(st2)
 		assert.Equal(t, uint64(2), sr2.id)
-		st2.WatchIds(ctx, [][]byte{expLogId, preloadLogId})
+		st2.WatchIds(ctx, []string{expLogId, preloadLogId})
 
 		fx.mockDB.receiver(expLogId, []consensus.Record{
 			{
-				Id: []byte{'1'},
+				Id: "1",
 			},
 		})
 		fx.mockDB.receiver(expLogId, []consensus.Record{
 			{
-				Id:     []byte{'2'},
-				PrevId: []byte{'1'},
+				Id:     "2",
+				PrevId: "1",
 			},
 			{
-				Id: []byte{'1'},
+				Id: "1",
 			},
 		})
 		fx.mockDB.receiver(preloadLogId, []consensus.Record{
 			{
-				Id:     []byte{'3'},
-				PrevId: []byte{'4'},
+				Id:     "3",
+				PrevId: "4",
 			},
 			{
-				Id:     []byte{'2'},
-				PrevId: []byte{'1'},
+				Id:     "2",
+				PrevId: "1",
 			},
 			{
-				Id: []byte{'1'},
+				Id: "1",
 			},
 		})
 		st1.Close()
@@ -96,25 +96,25 @@ func TestService_NewStream(t *testing.T) {
 
 		require.Len(t, sr1.logs, 2)
 		assert.Len(t, sr1.logs[string(expLogId)].Records, 2)
-		assert.Equal(t, []byte{'2'}, sr1.logs[string(expLogId)].Records[0].Id)
-		assert.Equal(t, []byte{'2'}, sr1.logs[string(preloadLogId)].Records[0].Id)
+		assert.Equal(t, "2", sr1.logs[string(expLogId)].Records[0].Id)
+		assert.Equal(t, "2", sr1.logs[string(preloadLogId)].Records[0].Id)
 
 		require.Len(t, sr2.logs, 2)
 		assert.Len(t, sr2.logs[string(expLogId)].Records, 2)
-		assert.Equal(t, []byte{'2'}, sr2.logs[string(expLogId)].Records[0].Id)
-		assert.Equal(t, []byte{'3'}, sr2.logs[string(preloadLogId)].Records[0].Id)
+		assert.Equal(t, "2", sr2.logs[string(expLogId)].Records[0].Id)
+		assert.Equal(t, "3", sr2.logs[string(preloadLogId)].Records[0].Id)
 	})
 	t.Run("error", func(t *testing.T) {
 		fx := newFixture(t)
 		defer fx.Finish(t)
-		fx.mockDB.fetchLog = func(ctx context.Context, logId []byte) (log consensus.Log, err error) {
+		fx.mockDB.fetchLog = func(ctx context.Context, logId string) (log consensus.Log, err error) {
 			return log, consensuserr.ErrLogNotFound
 		}
 		st1 := fx.NewStream()
 		sr1 := readStream(st1)
-		id := []byte("nonExists")
+		id := "nonExists"
 		assert.Equal(t, uint64(1), sr1.id)
-		st1.WatchIds(ctx, [][]byte{id})
+		st1.WatchIds(ctx, []string{id})
 		st1.Close()
 		<-sr1.finished
 		require.Len(t, sr1.logs, 1)
@@ -171,11 +171,13 @@ func (sr *streamReader) read() {
 			return
 		}
 		for _, l := range logs {
-			if el, ok := sr.logs[string(l.Id)]; !ok {
-				sr.logs[string(l.Id)] = l
+			if el, ok := sr.logs[l.Id]; !ok {
+				sr.logs[l.Id] = l
 			} else {
-				el.Records = append(l.Records, el.Records...)
-				sr.logs[string(l.Id)] = el
+				rec := make([]consensus.Record, len(l.Records))
+				copy(rec, l.Records)
+				el.Records = append(rec, el.Records...)
+				sr.logs[l.Id] = el
 			}
 		}
 	}
@@ -183,15 +185,15 @@ func (sr *streamReader) read() {
 
 type mockDB struct {
 	receiver db.ChangeReceiver
-	fetchLog func(ctx context.Context, logId []byte) (log consensus.Log, err error)
+	fetchLog func(ctx context.Context, logId string) (log consensus.Log, err error)
 }
 
 func (m *mockDB) AddLog(ctx context.Context, log consensus.Log) (err error) { return nil }
-func (m *mockDB) AddRecord(ctx context.Context, logId []byte, record consensus.Record) (err error) {
+func (m *mockDB) AddRecord(ctx context.Context, logId string, record consensus.Record) (err error) {
 	return nil
 }
 
-func (m *mockDB) FetchLog(ctx context.Context, logId []byte) (log consensus.Log, err error) {
+func (m *mockDB) FetchLog(ctx context.Context, logId string) (log consensus.Log, err error) {
 	return m.fetchLog(ctx, logId)
 }
 

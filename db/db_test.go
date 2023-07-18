@@ -19,11 +19,11 @@ func TestService_AddLog(t *testing.T) {
 		fx := newFixture(t, nil)
 		defer fx.Finish(t)
 		log := consensus.Log{
-			Id: []byte("logOne"),
+			Id: "logOne",
 			Records: []consensus.Record{
 				{
-					Id:      []byte("recordOne"),
-					PrevId:  nil,
+					Id:      "recordOne",
+					PrevId:  "",
 					Payload: []byte("payload"),
 					Created: time.Now().Truncate(time.Second).UTC(),
 				},
@@ -38,7 +38,7 @@ func TestService_AddLog(t *testing.T) {
 		fx := newFixture(t, nil)
 		defer fx.Finish(t)
 		log := consensus.Log{
-			Id: []byte("logOne"),
+			Id: "logOne",
 		}
 		require.NoError(t, fx.AddLog(ctx, log))
 		// TODO: check for specified error
@@ -52,23 +52,23 @@ func TestService_AddRecord(t *testing.T) {
 		defer fx.Finish(t)
 		var records = []consensus.Record{
 			{
-				Id:     []byte("2"),
-				PrevId: []byte("1"),
+				Id:     "2",
+				PrevId: "1",
 			},
 			{
-				Id:     []byte("3"),
-				PrevId: []byte("2"),
+				Id:     "3",
+				PrevId: "2",
 			},
 			{
-				Id:     []byte("4"),
-				PrevId: []byte("3"),
+				Id:     "4",
+				PrevId: "3",
 			},
 		}
 		l := consensus.Log{
-			Id: []byte("logTestRecords"),
+			Id: "logTestRecords",
 			Records: []consensus.Record{
 				{
-					Id: []byte("1"),
+					Id: "1",
 				},
 			},
 		}
@@ -82,15 +82,15 @@ func TestService_AddRecord(t *testing.T) {
 		fx := newFixture(t, nil)
 		defer fx.Finish(t)
 		log := consensus.Log{
-			Id: []byte("logTestRecords"),
+			Id: "logTestRecords",
 			Records: []consensus.Record{
 				{
-					Id: []byte("1"),
+					Id: "1",
 				},
 			},
 		}
 		require.NoError(t, fx.AddLog(ctx, log))
-		assert.Error(t, fx.AddRecord(ctx, log.Id, consensus.Record{Id: []byte("2"), PrevId: []byte("3")}))
+		assert.EqualError(t, fx.AddRecord(ctx, log.Id, consensus.Record{Id: "2", PrevId: "3"}), consensuserr.ErrConflict.Error())
 	})
 }
 
@@ -98,7 +98,7 @@ func TestService_FetchLog(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		fx := newFixture(t, nil)
 		defer fx.Finish(t)
-		l, err := fx.FetchLog(ctx, []byte("not exists"))
+		l, err := fx.FetchLog(ctx, "not exists")
 		assert.Empty(t, l)
 		assert.ErrorIs(t, err, consensuserr.ErrLogNotFound)
 	})
@@ -108,36 +108,36 @@ func TestService_ChangeReceive(t *testing.T) {
 	t.Run("set after run", func(t *testing.T) {
 		fx := newFixture(t, nil)
 		defer fx.Finish(t)
-		assert.Error(t, fx.SetChangeReceiver(func(logId []byte, records []consensus.Record) {}))
+		assert.Error(t, fx.SetChangeReceiver(func(logId string, records []consensus.Record) {}))
 	})
 	t.Run("receive changes", func(t *testing.T) {
 		var logs = make(chan consensus.Log, 10)
 		var count int
-		fx := newFixture(t, func(logId []byte, records []consensus.Record) {
+		fx := newFixture(t, func(logId string, records []consensus.Record) {
 			logs <- consensus.Log{Id: logId, Records: records}
 			count++
 		})
 		defer fx.Finish(t)
 		var l = consensus.Log{
-			Id: []byte("logTestStream"),
+			Id: "logTestStream",
 			Records: []consensus.Record{
 				{
-					Id: []byte("1"),
+					Id: "1",
 				},
 			},
 		}
 		var records = []consensus.Record{
 			{
-				Id:     []byte("2"),
-				PrevId: []byte("1"),
+				Id:     "2",
+				PrevId: "1",
 			},
 			{
-				Id:     []byte("3"),
-				PrevId: []byte("2"),
+				Id:     "3",
+				PrevId: "2",
 			},
 			{
-				Id:     []byte("4"),
-				PrevId: []byte("3"),
+				Id:     "4",
+				PrevId: "3",
 			},
 		}
 		require.NoError(t, fx.AddLog(ctx, l))
@@ -198,7 +198,7 @@ func (fx *fixture) Finish(t *testing.T) {
 	assert.NoError(t, fx.a.Close(ctx))
 }
 
-func (fx *fixture) assertLogValid(t *testing.T, logId []byte, count int) {
+func (fx *fixture) assertLogValid(t *testing.T, logId string, count int) {
 	log, err := fx.FetchLog(ctx, logId)
 	require.NoError(t, err)
 	assertLogValid(t, log, count)
@@ -208,10 +208,10 @@ func assertLogValid(t *testing.T, log consensus.Log, count int) {
 	if count >= 0 {
 		assert.Len(t, log.Records, count)
 	}
-	var prevId []byte
+	var prevId string
 	for _, rec := range log.Records {
 		if len(prevId) != 0 {
-			assert.Equal(t, string(prevId), string(rec.Id))
+			assert.Equal(t, prevId, rec.Id)
 		}
 		prevId = rec.PrevId
 	}

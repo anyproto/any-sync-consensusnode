@@ -1,3 +1,4 @@
+//go:generate mockgen -destination mock_db/mock_db.go github.com/anyproto/any-sync-consensusnode/db Service
 package db
 
 import (
@@ -21,16 +22,16 @@ func New() Service {
 	return &service{}
 }
 
-type ChangeReceiver func(logId []byte, records []consensus.Record)
+type ChangeReceiver func(logId string, records []consensus.Record)
 
 type Service interface {
 	// AddLog adds new log db
 	AddLog(ctx context.Context, log consensus.Log) (err error)
 	// AddRecord adds new record to existing log
 	// returns consensuserr.ErrConflict if record didn't match or log not found
-	AddRecord(ctx context.Context, logId []byte, record consensus.Record) (err error)
+	AddRecord(ctx context.Context, logId string, record consensus.Record) (err error)
 	// FetchLog gets log by id
-	FetchLog(ctx context.Context, logId []byte) (log consensus.Log, err error)
+	FetchLog(ctx context.Context, logId string) (log consensus.Log, err error)
 	// SetChangeReceiver sets the receiver for updates, it must be called before app.Run stage
 	SetChangeReceiver(receiver ChangeReceiver) (err error)
 	app.ComponentRunnable
@@ -80,12 +81,12 @@ func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
 }
 
 type findLogQuery struct {
-	Id []byte `bson:"_id"`
+	Id string `bson:"_id"`
 }
 
 type findRecordQuery struct {
-	Id           []byte `bson:"_id"`
-	LastRecordId []byte `bson:"records.0.id"`
+	Id           string `bson:"_id"`
+	LastRecordId string `bson:"records.0.id"`
 }
 
 type updateOp struct {
@@ -97,7 +98,7 @@ type updateOp struct {
 	} `bson:"$push"`
 }
 
-func (s *service) AddRecord(ctx context.Context, logId []byte, record consensus.Record) (err error) {
+func (s *service) AddRecord(ctx context.Context, logId string, record consensus.Record) (err error) {
 	var upd updateOp
 	upd.Push.Records.Each = []consensus.Record{record}
 	result, err := s.logColl.UpdateOne(ctx, findRecordQuery{
@@ -106,15 +107,17 @@ func (s *service) AddRecord(ctx context.Context, logId []byte, record consensus.
 	}, upd)
 	if err != nil {
 		log.Error("addRecord update error", zap.Error(err))
-		return consensuserr.ErrUnexpected
+		err = consensuserr.ErrUnexpected
+		return
 	}
 	if result.ModifiedCount == 0 {
-		return consensuserr.ErrConflict
+		err = consensuserr.ErrConflict
+		return
 	}
 	return
 }
 
-func (s *service) FetchLog(ctx context.Context, logId []byte) (l consensus.Log, err error) {
+func (s *service) FetchLog(ctx context.Context, logId string) (l consensus.Log, err error) {
 	if err = s.logColl.FindOne(ctx, findLogQuery{Id: logId}).Decode(&l); err != nil {
 		if err == mongo.ErrNoDocuments {
 			err = consensuserr.ErrLogNotFound
@@ -153,7 +156,7 @@ func (s *service) runStreamListener(ctx context.Context) (err error) {
 
 type streamResult struct {
 	DocumentKey struct {
-		Id []byte `bson:"_id"`
+		Id string `bson:"_id"`
 	} `bson:"documentKey"`
 	UpdateDescription struct {
 		UpdateFields struct {
