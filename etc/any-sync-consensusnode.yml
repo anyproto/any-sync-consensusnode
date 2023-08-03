@@ -3,7 +3,7 @@ account:
   peerKey: 5Btn70kUmMokNhSDhu3GzuFcbLxK9aRnoyb/zPWkLvu7svtWJZxQDJ5AWYZ4TxGhgb/GbZB1nPjp7Kz+V+J4OQ==
   signingKey: 5Btn70kUmMokNhSDhu3GzuFcbLxK9aRnoyb/zPWkLvu7svtWJZxQDJ5AWYZ4TxGhgb/GbZB1nPjp7Kz+V+J4OQ==
 mongo:
-  connect: mongodb://localhost:27017
+  connect: mongodb://localhost:27017/?w=majority
   database: consensus
   logCollection: log
 metric:
@@ -57,4 +57,4 @@ networkUpdateIntervalSec: 600
 log:
   production: false
   defaultLevel: ""
-  namedLevels: { }
+  namedLevels: {}
