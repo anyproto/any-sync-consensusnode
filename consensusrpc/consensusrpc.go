@@ -108,6 +108,10 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 		return
 	}
 
+	// set an accept time
+	createdTime := time.Now()
+	req.Record.AcceptorTimestamp = createdTime.Unix()
+
 	// sign a record
 	req.Record.AcceptorIdentity = c.account.Account().SignKey.GetPublic().Storage()
 	if req.Record.AcceptorSignature, err = c.account.Account().SignKey.Sign(req.Record.Payload); err != nil {
@@ -115,7 +119,6 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 		err = consensuserr.ErrUnexpected
 		return
 	}
-
 	// marshal with identity and sign
 	payload, err := req.Record.Marshal()
 	if err != nil {
@@ -137,7 +140,7 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 		Id:      id,
 		PrevId:  rec.PrevId,
 		Payload: payload,
-		Created: time.Now(),
+		Created: createdTime,
 	}); err != nil {
 		return
 	}

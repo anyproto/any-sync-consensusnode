@@ -119,6 +119,10 @@ func TestConsensusRpc_RecordAdd(t *testing.T) {
 		require.NotEmpty(t, resp)
 		assert.NotEmpty(t, resp.Id)
 		assert.NotEmpty(t, resp.Payload)
+
+		var result = &consensusproto.RawRecord{}
+		require.NoError(t, result.Unmarshal(resp.Payload))
+		assert.NotEmpty(t, result.AcceptorTimestamp)
 	})
 	t.Run("invalid peer", func(t *testing.T) {
 		fx := newFixture(t)
