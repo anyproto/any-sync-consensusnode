@@ -12,3 +12,4 @@ updates:
     ignore:
       - dependency-name: "github.com/anyproto/any-sync"
       - dependency-name: "github.com/anyproto/any-sync-node"
+      ### DELETE ME ###
