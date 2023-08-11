@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/ahmetb/govvv v0.3.0
-	github.com/anyproto/any-sync v0.2.18-0.20230811143014-a31f05a20133
+	github.com/anyproto/any-sync v0.2.18-0.20230811150316-a7368f08addd
 	github.com/cheggaaa/mb/v3 v3.0.1
 	github.com/stretchr/testify v1.8.4
 	go.mongodb.org/mongo-driver v1.12.1
