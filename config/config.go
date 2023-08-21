@@ -6,6 +6,7 @@ import (
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/metric"
 	"github.com/anyproto/any-sync/net/rpc"
+	"github.com/anyproto/any-sync/net/transport/quic"
 	"github.com/anyproto/any-sync/net/transport/yamux"
 	"github.com/anyproto/any-sync/nodeconf"
 	"gopkg.in/yaml.v3"
@@ -36,6 +37,7 @@ type Config struct {
 	Metric                   metric.Config          `yaml:"metric"`
 	Log                      logger.Config          `yaml:"log"`
 	Yamux                    yamux.Config           `yaml:"yamux"`
+	Quic                     quic.Config            `yaml:"quic"`
 }
 
 func (c *Config) Init(a *app.App) (err error) {
@@ -76,4 +78,8 @@ func (c Config) GetNodeConfUpdateInterval() int {
 
 func (c Config) GetYamux() yamux.Config {
 	return c.Yamux
+}
+
+func (c Config) GetQuic() quic.Config {
+	return c.Quic
 }
