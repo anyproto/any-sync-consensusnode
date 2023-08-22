@@ -46,6 +46,27 @@ func TestService_AddLog(t *testing.T) {
 	})
 }
 
+func TestService_DeleteLog(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+		log := consensus.Log{
+			Id: "logOne",
+		}
+		require.NoError(t, fx.AddLog(ctx, log))
+		require.NoError(t, fx.DeleteLog(ctx, log.Id))
+		_, err := fx.FetchLog(ctx, log.Id)
+		require.EqualError(t, err, consensuserr.ErrLogNotFound.Error())
+	})
+	t.Run("not found err", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+
+		err := fx.DeleteLog(ctx, "not found")
+		require.EqualError(t, err, consensuserr.ErrLogNotFound.Error())
+	})
+}
+
 func TestService_AddRecord(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		fx := newFixture(t, nil)
