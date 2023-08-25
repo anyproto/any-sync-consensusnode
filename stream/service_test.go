@@ -183,12 +183,15 @@ func (sr *streamReader) read() {
 	}
 }
 
+var _ db.Service = &mockDB{}
+
 type mockDB struct {
 	receiver db.ChangeReceiver
 	fetchLog func(ctx context.Context, logId string) (log consensus.Log, err error)
 }
 
 func (m *mockDB) AddLog(ctx context.Context, log consensus.Log) (err error) { return nil }
+func (m *mockDB) DeleteLog(ctx context.Context, logId string) error         { return nil }
 func (m *mockDB) AddRecord(ctx context.Context, logId string, record consensus.Record) (err error) {
 	return nil
 }

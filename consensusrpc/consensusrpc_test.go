@@ -207,6 +207,22 @@ func TestConsensusRpc_LogWatch(t *testing.T) {
 	assert.Equal(t, consensusproto.ErrCodes(502), ev.Error.Error)
 }
 
+func TestConsensusRpc_LogDelete(t *testing.T) {
+	fx := newFixture(t)
+	defer fx.finish(t)
+
+	var logId = "logId"
+
+	pctx := peer.CtxWithPeerId(ctx, "peerId")
+	fx.nodeconf.EXPECT().NodeTypes("peerId").Return([]nodeconf.NodeType{
+		nodeconf.NodeTypeTree,
+	})
+	fx.db.EXPECT().DeleteLog(pctx, logId)
+	resp, err := fx.LogDelete(pctx, &consensusproto.LogDeleteRequest{LogId: logId})
+	assert.NotNil(t, resp)
+	assert.NoError(t, err)
+}
+
 type fixture struct {
 	a        *app.App
 	ctrl     *gomock.Controller

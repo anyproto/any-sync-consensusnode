@@ -27,6 +27,8 @@ type ChangeReceiver func(logId string, records []consensus.Record)
 type Service interface {
 	// AddLog adds new log db
 	AddLog(ctx context.Context, log consensus.Log) (err error)
+	// DeleteLog deletes the log
+	DeleteLog(ctx context.Context, logId string) error
 	// AddRecord adds new record to existing log
 	// returns consensuserr.ErrConflict if record didn't match or log not found
 	AddRecord(ctx context.Context, logId string, record consensus.Record) (err error)
@@ -82,6 +84,17 @@ func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
 
 type findLogQuery struct {
 	Id string `bson:"_id"`
+}
+
+func (s *service) DeleteLog(ctx context.Context, logId string) (err error) {
+	res, err := s.logColl.DeleteOne(ctx, findLogQuery{Id: logId})
+	if err != nil {
+		return
+	}
+	if res.DeletedCount == 0 {
+		return consensuserr.ErrLogNotFound
+	}
+	return
 }
 
 type findRecordQuery struct {

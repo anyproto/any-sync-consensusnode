@@ -29,6 +29,8 @@ func New() app.Component {
 	return &consensusRpc{}
 }
 
+var okResp = &consensusproto.Ok{}
+
 // consensusRpc implements consensus rpc server
 type consensusRpc struct {
 	db       db.Service
@@ -84,7 +86,27 @@ func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddReq
 	if err = c.db.AddLog(ctx, l); err != nil {
 		return
 	}
-	return &consensusproto.Ok{}, nil
+	return okResp, nil
+}
+
+func (c *consensusRpc) LogDelete(ctx context.Context, req *consensusproto.LogDeleteRequest) (resp *consensusproto.Ok, err error) {
+	st := time.Now()
+	defer func() {
+		c.metric.RequestLog(ctx, "consensus.logDelete",
+			metric.TotalDur(time.Since(st)),
+			zap.String("logId", req.LogId),
+			zap.Error(err),
+		)
+	}()
+
+	if err = c.checkClient(ctx); err != nil {
+		return
+	}
+
+	if err = c.db.DeleteLog(ctx, req.LogId); err != nil {
+		return
+	}
+	return okResp, nil
 }
 
 func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.RecordAddRequest) (resp *consensusproto.RawRecordWithId, err error) {
