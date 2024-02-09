@@ -1,13 +1,14 @@
 .PHONY: proto build test deps
 export GOPRIVATE=github.com/anyproto
 export PATH:=deps:$(PATH)
+BUILD_GOARCH:=$(shell go env GOARCH)
 
 proto:
 	protoc --gogofaster_out=:. --go-drpc_out=protolib=github.com/gogo/protobuf:. consensusproto/protos/*.proto
 
 build:
 	@$(eval FLAGS := $$(shell PATH=$(PATH) govvv -flags -pkg github.com/anyproto/any-sync/app))
-	go build -v -o bin/any-sync-consensusnode -ldflags "$(FLAGS) -X github.com/anyproto/any-sync/app.AppName=any-sync-consensusnode" github.com/anyproto/any-sync-consensusnode/cmd
+	GOARCH=$(BUILD_GOARCH) go build -v -o bin/any-sync-consensusnode -ldflags "$(FLAGS) -X github.com/anyproto/any-sync/app.AppName=any-sync-consensusnode" github.com/anyproto/any-sync-consensusnode/cmd
 
 test:
 	go test ./... --cover
