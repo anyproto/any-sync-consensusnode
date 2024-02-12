@@ -7,7 +7,7 @@ require (
 	github.com/anyproto/any-sync v0.3.21-0.20240212181741-93750e501fea
 	github.com/cheggaaa/mb/v3 v3.0.2
 	github.com/stretchr/testify v1.8.4
-	go.mongodb.org/mongo-driver v1.12.1
+	go.mongodb.org/mongo-driver v1.13.1
 	go.uber.org/mock v0.4.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3
