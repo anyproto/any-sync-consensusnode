@@ -2,9 +2,8 @@ package consensusrpc
 
 import (
 	"context"
-	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/db"
-	"github.com/anyproto/any-sync-consensusnode/stream"
+	"time"
+
 	"github.com/anyproto/any-sync/accountservice"
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
@@ -18,7 +17,10 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 	"storj.io/drpc/drpcerr"
-	"time"
+
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/db"
+	"github.com/anyproto/any-sync-consensusnode/stream"
 )
 
 const CName = "consensus.consensusrpc"
@@ -58,7 +60,7 @@ func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddReq
 	defer func() {
 		c.metric.RequestLog(ctx, "consensus.logAdd",
 			metric.TotalDur(time.Since(st)),
-			zap.String("logId", req.Record.Id),
+			zap.String("logId", req.LogId),
 			zap.Error(err),
 		)
 	}()
@@ -74,7 +76,7 @@ func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddReq
 
 	// we don't sign the first record because it affects the id, but we sign the following records as a confirmation that the chain is valid and the record added from a valid source
 	l := consensus.Log{
-		Id: req.Record.Id,
+		Id: req.LogId,
 		Records: []consensus.Record{
 			{
 				Id:      req.Record.Id,
