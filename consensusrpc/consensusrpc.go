@@ -15,7 +15,6 @@ import (
 	"github.com/anyproto/any-sync/nodeconf"
 	"github.com/anyproto/any-sync/util/cidutil"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 	"storj.io/drpc/drpcerr"
 
 	consensus "github.com/anyproto/any-sync-consensusnode"
@@ -230,10 +229,15 @@ func (c *consensusRpc) checkClient(ctx context.Context) (err error) {
 	if err != nil {
 		return consensuserr.ErrForbidden
 	}
-	if !slices.Contains(c.nodeconf.NodeTypes(peerId), nodeconf.NodeTypeTree) {
-		return consensuserr.ErrForbidden
+	nodeTypes := c.nodeconf.NodeTypes(peerId)
+	for _, nodeType := range nodeTypes {
+		switch nodeType {
+		case nodeconf.NodeTypeCoordinator,
+			nodeconf.NodeTypeTree:
+			return nil
+		}
 	}
-	return
+	return consensuserr.ErrForbidden
 }
 
 func recordsToProto(recs []consensus.Record) []*consensusproto.RawRecordWithId {

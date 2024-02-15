@@ -59,7 +59,7 @@ func TestConsensusRpc_LogAdd(t *testing.T) {
 		pctx := peer.CtxWithPeerId(ctx, "peerId")
 
 		fx.nodeconf.EXPECT().NodeTypes("peerId").Return([]nodeconf.NodeType{
-			nodeconf.NodeTypeTree,
+			nodeconf.NodeTypeCoordinator,
 		})
 
 		fx.db.EXPECT().AddLog(pctx, gomock.Any())
