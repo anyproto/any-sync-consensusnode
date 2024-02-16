@@ -2,11 +2,10 @@ package consensusrpc
 
 import (
 	"context"
-	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/config"
-	"github.com/anyproto/any-sync-consensusnode/db"
-	"github.com/anyproto/any-sync-consensusnode/db/mock_db"
-	"github.com/anyproto/any-sync-consensusnode/stream"
+	"net"
+	"testing"
+	"time"
+
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/consensus/consensusproto"
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
@@ -20,10 +19,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	"net"
 	"storj.io/drpc/drpcconn"
-	"testing"
-	"time"
+
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/config"
+	"github.com/anyproto/any-sync-consensusnode/db"
+	"github.com/anyproto/any-sync-consensusnode/db/mock_db"
+	"github.com/anyproto/any-sync-consensusnode/stream"
 )
 
 var ctx = context.Background()
@@ -57,12 +59,13 @@ func TestConsensusRpc_LogAdd(t *testing.T) {
 		pctx := peer.CtxWithPeerId(ctx, "peerId")
 
 		fx.nodeconf.EXPECT().NodeTypes("peerId").Return([]nodeconf.NodeType{
-			nodeconf.NodeTypeTree,
+			nodeconf.NodeTypeCoordinator,
 		})
 
 		fx.db.EXPECT().AddLog(pctx, gomock.Any())
 
 		resp, err := fx.LogAdd(pctx, &consensusproto.LogAddRequest{
+			LogId:  "testLog.id",
 			Record: rec,
 		})
 		require.NoError(t, err)
@@ -77,6 +80,7 @@ func TestConsensusRpc_LogAdd(t *testing.T) {
 		pctx := peer.CtxWithPeerId(ctx, "peerId")
 		fx.nodeconf.EXPECT().NodeTypes("peerId").Return(nil)
 		_, err := fx.LogAdd(pctx, &consensusproto.LogAddRequest{
+			LogId:  "testLog",
 			Record: rec,
 		})
 		require.EqualError(t, err, consensuserr.ErrForbidden.Error())
@@ -92,6 +96,7 @@ func TestConsensusRpc_LogAdd(t *testing.T) {
 			nodeconf.NodeTypeTree,
 		})
 		_, err := fx.LogAdd(pctx, &consensusproto.LogAddRequest{
+			LogId:  "testLogId",
 			Record: rec,
 		})
 		require.EqualError(t, err, consensuserr.ErrInvalidPayload.Error())
