@@ -68,7 +68,7 @@ func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddReq
 		return
 	}
 
-	if req.Record == nil || !cidutil.VerifyCid(req.Record.Payload, req.Record.Id) {
+	if req.GetRecord() == nil || !cidutil.VerifyCid(req.Record.Payload, req.Record.Id) {
 		err = consensuserr.ErrInvalidPayload
 		return
 	}
