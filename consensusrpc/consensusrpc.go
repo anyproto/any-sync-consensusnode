@@ -64,7 +64,7 @@ func (c *consensusRpc) LogAdd(ctx context.Context, req *consensusproto.LogAddReq
 		)
 	}()
 
-	if err = c.checkClient(ctx); err != nil {
+	if err = c.checkWrite(ctx); err != nil {
 		return
 	}
 
@@ -100,7 +100,7 @@ func (c *consensusRpc) LogDelete(ctx context.Context, req *consensusproto.LogDel
 		)
 	}()
 
-	if err = c.checkClient(ctx); err != nil {
+	if err = c.checkWrite(ctx); err != nil {
 		return
 	}
 
@@ -120,7 +120,7 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 		)
 	}()
 
-	if err = c.checkClient(ctx); err != nil {
+	if err = c.checkWrite(ctx); err != nil {
 		return
 	}
 
@@ -174,7 +174,7 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 }
 
 func (c *consensusRpc) LogWatch(rpcStream consensusproto.DRPCConsensus_LogWatchStream) error {
-	if err := c.checkClient(rpcStream.Context()); err != nil {
+	if err := c.checkRead(rpcStream.Context()); err != nil {
 		return err
 	}
 
@@ -224,7 +224,24 @@ func (c *consensusRpc) readStream(st *stream.Stream, rpcStream consensusproto.DR
 	}
 }
 
-func (c *consensusRpc) checkClient(ctx context.Context) (err error) {
+func (c *consensusRpc) checkRead(ctx context.Context) (err error) {
+	peerId, err := peer.CtxPeerId(ctx)
+	if err != nil {
+		return consensuserr.ErrForbidden
+	}
+	nodeTypes := c.nodeconf.NodeTypes(peerId)
+	for _, nodeType := range nodeTypes {
+		switch nodeType {
+		case nodeconf.NodeTypeCoordinator,
+			nodeconf.NodeTypeTree,
+			nodeconf.NodeTypeFile:
+			return nil
+		}
+	}
+	return consensuserr.ErrForbidden
+}
+
+func (c *consensusRpc) checkWrite(ctx context.Context) (err error) {
 	peerId, err := peer.CtxPeerId(ctx)
 	if err != nil {
 		return consensuserr.ErrForbidden

@@ -93,7 +93,7 @@ func TestConsensusRpc_LogAdd(t *testing.T) {
 		rec.Id += "1"
 		pctx := peer.CtxWithPeerId(ctx, "peerId")
 		fx.nodeconf.EXPECT().NodeTypes("peerId").Return([]nodeconf.NodeType{
-			nodeconf.NodeTypeTree,
+			nodeconf.NodeTypeCoordinator,
 		})
 		_, err := fx.LogAdd(pctx, &consensusproto.LogAddRequest{
 			LogId:  "testLogId",
@@ -111,7 +111,7 @@ func TestConsensusRpc_RecordAdd(t *testing.T) {
 		_, rec := testRecord("prevId")
 		pctx := peer.CtxWithPeerId(ctx, "peerId")
 		fx.nodeconf.EXPECT().NodeTypes("peerId").Return([]nodeconf.NodeType{
-			nodeconf.NodeTypeTree,
+			nodeconf.NodeTypeCoordinator,
 		})
 
 		fx.db.EXPECT().AddRecord(pctx, "logId", gomock.Any())
@@ -152,7 +152,7 @@ func TestConsensusRpc_LogWatch(t *testing.T) {
 	}()
 
 	fx.nodeconf.EXPECT().NodeTypes("peerId").Return([]nodeconf.NodeType{
-		nodeconf.NodeTypeTree,
+		nodeconf.NodeTypeFile,
 	})
 
 	cl := consensusproto.NewDRPCConsensusClient(drpcconn.New(clConn))
@@ -220,7 +220,7 @@ func TestConsensusRpc_LogDelete(t *testing.T) {
 
 	pctx := peer.CtxWithPeerId(ctx, "peerId")
 	fx.nodeconf.EXPECT().NodeTypes("peerId").Return([]nodeconf.NodeType{
-		nodeconf.NodeTypeTree,
+		nodeconf.NodeTypeCoordinator,
 	})
 	fx.db.EXPECT().DeleteLog(pctx, logId)
 	resp, err := fx.LogDelete(pctx, &consensusproto.LogDeleteRequest{LogId: logId})
