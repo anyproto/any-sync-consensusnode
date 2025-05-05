@@ -1,6 +1,7 @@
 module github.com/anyproto/any-sync-consensusnode
 
 go 1.22.0
+toolchain go1.24.1
 
 require (
 	github.com/ahmetb/govvv v0.3.0
@@ -8,7 +9,7 @@ require (
 	github.com/cheggaaa/mb/v3 v3.0.2
 	github.com/stretchr/testify v1.9.0
 	go.mongodb.org/mongo-driver v1.17.2
-	go.uber.org/mock v0.5.0
+	go.uber.org/mock v0.5.2
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
 	storj.io/drpc v0.0.34
