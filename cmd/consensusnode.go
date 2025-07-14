@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/anyproto/any-sync-consensusnode/account"
-	"github.com/anyproto/any-sync-consensusnode/config"
-	"github.com/anyproto/any-sync-consensusnode/consensusrpc"
-	"github.com/anyproto/any-sync-consensusnode/db"
-	"github.com/anyproto/any-sync-consensusnode/stream"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/coordinator/coordinatorclient"
@@ -23,20 +25,20 @@ import (
 	"github.com/anyproto/any-sync/nodeconf"
 	"github.com/anyproto/any-sync/nodeconf/nodeconfstore"
 	"go.uber.org/zap"
+
+	"github.com/anyproto/any-sync-consensusnode/account"
+	"github.com/anyproto/any-sync-consensusnode/config"
+	"github.com/anyproto/any-sync-consensusnode/consensusrpc"
+	"github.com/anyproto/any-sync-consensusnode/db"
+	"github.com/anyproto/any-sync-consensusnode/stream"
 	// import this to keep govvv in go.mod on mod tidy
 	_ "github.com/ahmetb/govvv/integration-test/app-different-package/mypkg"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 var log = logger.NewNamed("main")
 
 var (
-	flagConfigFile = flag.String("c", "etc/consensus-config.yml", "path to config file")
+	flagConfigFile = flag.String("c", "etc/any-sync-consensusnode.yml", "path to config file")
 	flagVersion    = flag.Bool("v", false, "show version and exit")
 	flagHelp       = flag.Bool("h", false, "show help and exit")
 )
