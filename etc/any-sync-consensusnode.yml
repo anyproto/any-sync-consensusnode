@@ -12,6 +12,7 @@ drpc:
   stream:
     timeoutMilliseconds: 1000
     maxMsgSizeMb: 256
+  snappy: true
 yamux:
   listenAddrs:
     - 127.0.0.1:4530

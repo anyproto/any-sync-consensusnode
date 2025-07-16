@@ -126,7 +126,7 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 
 	// unmarshal payload as a consensus record
 	rec := &consensusproto.Record{}
-	if e := rec.Unmarshal(req.Record.Payload); e != nil {
+	if e := rec.UnmarshalVT(req.Record.Payload); e != nil {
 		err = consensuserr.ErrInvalidPayload
 		return
 	}
@@ -143,7 +143,7 @@ func (c *consensusRpc) RecordAdd(ctx context.Context, req *consensusproto.Record
 		return
 	}
 	// marshal with identity and sign
-	payload, err := req.Record.Marshal()
+	payload, err := req.Record.MarshalVT()
 	if err != nil {
 		log.Warn("can't marshal payload", zap.Error(err))
 		err = consensuserr.ErrUnexpected

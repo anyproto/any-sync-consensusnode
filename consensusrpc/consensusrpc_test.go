@@ -38,11 +38,11 @@ func testRecord(prevId string) (rId *consensusproto.RawRecordWithId, rawRec *con
 		Timestamp: time.Now().Unix(),
 	}
 
-	recPayload, _ := rec.Marshal()
+	recPayload, _ := rec.MarshalVT()
 	rawRec = &consensusproto.RawRecord{
 		Payload: recPayload,
 	}
-	payload, _ := rawRec.Marshal()
+	payload, _ := rawRec.MarshalVT()
 	id, _ := cidutil.NewCidFromBytes(payload)
 	return &consensusproto.RawRecordWithId{
 		Payload: payload,
@@ -126,7 +126,7 @@ func TestConsensusRpc_RecordAdd(t *testing.T) {
 		assert.NotEmpty(t, resp.Payload)
 
 		var result = &consensusproto.RawRecord{}
-		require.NoError(t, result.Unmarshal(resp.Payload))
+		require.NoError(t, result.UnmarshalVT(resp.Payload))
 		assert.NotEmpty(t, result.AcceptorTimestamp)
 	})
 	t.Run("invalid peer", func(t *testing.T) {
