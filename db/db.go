@@ -4,14 +4,18 @@ package db
 import (
 	"context"
 	"fmt"
-	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/config"
+	"time"
+
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.uber.org/zap"
+
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/config"
 )
 
 const CName = "consensus.db"
@@ -62,6 +66,11 @@ func (s *service) Name() (name string) {
 func (s *service) Run(ctx context.Context) (err error) {
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(s.conf.Connect))
 	if err != nil {
+		return err
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err = client.Ping(pingCtx, readpref.Primary()); err != nil {
 		return err
 	}
 	s.logColl = client.Database(s.conf.Database).Collection(s.conf.LogCollection)
