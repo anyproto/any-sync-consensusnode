@@ -2,14 +2,16 @@ package stream
 
 import (
 	"context"
-	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/db"
+	"testing"
+	"time"
+
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
+
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/db"
 )
 
 var ctx = context.Background()
@@ -190,8 +192,10 @@ type mockDB struct {
 	fetchLog func(ctx context.Context, logId string) (log consensus.Log, err error)
 }
 
-func (m *mockDB) AddLog(ctx context.Context, log consensus.Log) (err error) { return nil }
-func (m *mockDB) DeleteLog(ctx context.Context, logId string) error         { return nil }
+func (m *mockDB) SetDeletionId(ctx context.Context, lastId string) (err error) { return }
+func (m *mockDB) GetDeletionId(ctx context.Context) (lastId string, err error) { return }
+func (m *mockDB) AddLog(ctx context.Context, log consensus.Log) (err error)    { return nil }
+func (m *mockDB) DeleteLog(ctx context.Context, logId string) error            { return nil }
 func (m *mockDB) AddRecord(ctx context.Context, logId string, record consensus.Record) (err error) {
 	return nil
 }

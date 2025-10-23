@@ -2,14 +2,15 @@ package db
 
 import (
 	"context"
-	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/config"
+	"testing"
+	"time"
+
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
+
+	consensus "github.com/anyproto/any-sync-consensusnode"
 )
 
 var ctx = context.Background()
@@ -180,6 +181,25 @@ func TestService_ChangeReceive(t *testing.T) {
 	})
 }
 
+func TestService_SetDeletionId(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+		_ = fx.Service.(*service).settingsColl.Drop(ctx)
+		recId, err := fx.GetDeletionId(ctx)
+		assert.Empty(t, recId)
+		assert.NoError(t, err)
+	})
+	t.Run("set get", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+		require.NoError(t, fx.SetDeletionId(ctx, "123"))
+		logId, err := fx.GetDeletionId(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "123", logId)
+	})
+}
+
 func newFixture(t *testing.T, cr ChangeReceiver) *fixture {
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	fx := &fixture{
@@ -187,13 +207,7 @@ func newFixture(t *testing.T, cr ChangeReceiver) *fixture {
 		cancel:  cancel,
 		a:       new(app.App),
 	}
-	fx.a.Register(&config.Config{
-		Mongo: config.Mongo{
-			Connect:       "mongodb://localhost:27017/?w=majority",
-			Database:      "consensus_test",
-			LogCollection: "log",
-		},
-	})
+	fx.a.Register(&testConfig{})
 	fx.a.Register(fx.Service)
 	require.NoError(t, fx.Service.SetChangeReceiver(cr))
 	err := fx.a.Start(ctx)
@@ -236,4 +250,16 @@ func assertLogValid(t *testing.T, log consensus.Log, count int) {
 		}
 		prevId = rec.PrevId
 	}
+}
+
+type testConfig struct {
+	Config
+}
+
+func (c *testConfig) Init(a *app.App) error { return nil }
+
+func (c *testConfig) Name() string { return "config" }
+
+func (c *testConfig) GetDB() Config {
+	return Config{Connect: "mongodb://localhost:27017/?w=majority", Database: "consensus_test", LogCollection: "log"}
 }
