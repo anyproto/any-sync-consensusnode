@@ -30,6 +30,7 @@ import (
 	"github.com/anyproto/any-sync-consensusnode/config"
 	"github.com/anyproto/any-sync-consensusnode/consensusrpc"
 	"github.com/anyproto/any-sync-consensusnode/db"
+	"github.com/anyproto/any-sync-consensusnode/deletelog"
 	"github.com/anyproto/any-sync-consensusnode/stream"
 	// import this to keep govvv in go.mod on mod tidy
 	_ "github.com/ahmetb/govvv/integration-test/app-different-package/mypkg"
@@ -115,5 +116,6 @@ func Bootstrap(a *app.App) {
 		Register(server.New()).
 		Register(db.New()).
 		Register(stream.New()).
-		Register(consensusrpc.New())
+		Register(consensusrpc.New()).
+		Register(deletelog.New())
 }

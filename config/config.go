@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+
 	commonaccount "github.com/anyproto/any-sync/accountservice"
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
@@ -10,7 +12,9 @@ import (
 	"github.com/anyproto/any-sync/net/transport/yamux"
 	"github.com/anyproto/any-sync/nodeconf"
 	"gopkg.in/yaml.v3"
-	"os"
+
+	"github.com/anyproto/any-sync-consensusnode/db"
+	"github.com/anyproto/any-sync-consensusnode/deletelog"
 )
 
 const CName = "config"
@@ -33,11 +37,12 @@ type Config struct {
 	Network                  nodeconf.Configuration `yaml:"network"`
 	NetworkStorePath         string                 `yaml:"networkStorePath"`
 	NetworkUpdateIntervalSec int                    `yaml:"networkUpdateIntervalSec"`
-	Mongo                    Mongo                  `yaml:"mongo"`
+	Mongo                    db.Config              `yaml:"mongo"`
 	Metric                   metric.Config          `yaml:"metric"`
 	Log                      logger.Config          `yaml:"log"`
 	Yamux                    yamux.Config           `yaml:"yamux"`
 	Quic                     quic.Config            `yaml:"quic"`
+	Deletion                 deletelog.Config       `yaml:"deletion"`
 }
 
 func (c *Config) Init(a *app.App) (err error) {
@@ -48,7 +53,7 @@ func (c Config) Name() (name string) {
 	return CName
 }
 
-func (c Config) GetMongo() Mongo {
+func (c Config) GetMongo() db.Config {
 	return c.Mongo
 }
 
@@ -82,4 +87,12 @@ func (c Config) GetYamux() yamux.Config {
 
 func (c Config) GetQuic() quic.Config {
 	return c.Quic
+}
+
+func (c Config) GetDeletion() deletelog.Config {
+	return c.Deletion
+}
+
+func (c Config) GetDB() db.Config {
+	return c.Mongo
 }

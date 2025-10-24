@@ -3,22 +3,25 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.uber.org/zap"
 
 	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/config"
 )
 
 const CName = "consensus.db"
+
+const settingsColl = "settings"
 
 var log = logger.NewNamed(CName)
 
@@ -40,12 +43,17 @@ type Service interface {
 	FetchLog(ctx context.Context, logId string) (log consensus.Log, err error)
 	// SetChangeReceiver sets the receiver for updates, it must be called before app.Run stage
 	SetChangeReceiver(receiver ChangeReceiver) (err error)
+	// SetDeletionId sets the last deleted log id
+	SetDeletionId(ctx context.Context, lastId string) (err error)
+	// GetDeletionId gets the last deletion log id
+	GetDeletionId(ctx context.Context) (lastId string, err error)
 	app.ComponentRunnable
 }
 
 type service struct {
-	conf           config.Mongo
+	conf           Config
 	logColl        *mongo.Collection
+	settingsColl   *mongo.Collection
 	running        bool
 	changeReceiver ChangeReceiver
 
@@ -55,7 +63,7 @@ type service struct {
 }
 
 func (s *service) Init(a *app.App) (err error) {
-	s.conf = a.MustComponent(config.CName).(*config.Config).Mongo
+	s.conf = a.MustComponent("config").(configGetter).GetDB()
 	return nil
 }
 
@@ -80,6 +88,7 @@ func (s *service) Run(ctx context.Context) (err error) {
 			return err
 		}
 	}
+	s.settingsColl = client.Database(s.conf.Database).Collection(settingsColl)
 	return
 }
 
@@ -198,6 +207,23 @@ func (s *service) streamListener(stream *mongo.ChangeStream) {
 		}
 		s.changeReceiver(res.DocumentKey.Id, res.UpdateDescription.UpdateFields.Records)
 	}
+}
+
+func (s *service) SetDeletionId(ctx context.Context, lastId string) (err error) {
+	updateOpts := options.Update().SetUpsert(true)
+	_, err = s.settingsColl.UpdateOne(ctx, bson.D{{"_id", "settings"}}, bson.D{{"$set", bson.D{{"logId", lastId}}}}, updateOpts)
+	return
+}
+
+func (s *service) GetDeletionId(ctx context.Context) (lastId string, err error) {
+	var res struct {
+		LogId string `bson:"logId"`
+	}
+	err = s.settingsColl.FindOne(ctx, bson.D{{"_id", "settings"}}).Decode(&res)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		err = nil
+	}
+	return res.LogId, err
 }
 
 func (s *service) Close(ctx context.Context) (err error) {

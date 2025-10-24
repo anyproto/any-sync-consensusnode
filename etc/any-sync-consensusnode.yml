@@ -64,3 +64,5 @@ log:
   production: false
   defaultLevel: ""
   namedLevels: {}
+deletion:
+  enable: true
