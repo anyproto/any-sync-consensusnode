@@ -71,6 +71,7 @@ func (d *deleteLog) checkLog(ctx context.Context) (err error) {
 				}
 				return err
 			}
+			handledCount++
 		}
 		if err = d.db.SetDeletionId(ctx, rec.Id); err != nil {
 			return err
