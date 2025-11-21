@@ -34,6 +34,9 @@ import (
 	"github.com/anyproto/any-sync-consensusnode/stream"
 	// import this to keep govvv in go.mod on mod tidy
 	_ "github.com/ahmetb/govvv/integration-test/app-different-package/mypkg"
+	_ "go.uber.org/mock/gomock"
+	_ "golang.org/x/mod/sumdb/note"
+	_ "golang.org/x/tools/cover"
 )
 
 var log = logger.NewNamed("main")
