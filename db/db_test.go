@@ -33,7 +33,14 @@ func TestService_AddLog(t *testing.T) {
 		require.NoError(t, fx.AddLog(ctx, log))
 		fetched, err := fx.FetchLog(ctx, log.Id)
 		require.NoError(t, err)
-		assert.Equal(t, log, fetched)
+		// Check the fetched log matches expected values (payload should be hydrated, hash should be set)
+		assert.Equal(t, log.Id, fetched.Id)
+		require.Len(t, fetched.Records, 1)
+		assert.Equal(t, log.Records[0].Id, fetched.Records[0].Id)
+		assert.Equal(t, log.Records[0].PrevId, fetched.Records[0].PrevId)
+		assert.Equal(t, log.Records[0].Payload, fetched.Records[0].Payload)
+		assert.Equal(t, log.Records[0].Created, fetched.Records[0].Created)
+		assert.NotEmpty(t, fetched.Records[0].PayloadHash) // Hash should be set after storage
 	})
 	t.Run("duplicate error", func(t *testing.T) {
 		fx := newFixture(t, nil)
@@ -228,8 +235,10 @@ func (fx *fixture) Finish(t *testing.T) {
 	if fx.cancel != nil {
 		fx.cancel()
 	}
-	coll := fx.Service.(*service).logColl
-	t.Log(coll.Drop(ctx))
+	svc := fx.Service.(*service)
+	t.Log(svc.logColl.Drop(ctx))
+	t.Log(svc.payloadColl.Drop(ctx))
+	t.Log(svc.settingsColl.Drop(ctx))
 	assert.NoError(t, fx.a.Close(ctx))
 }
 
@@ -261,5 +270,10 @@ func (c *testConfig) Init(a *app.App) error { return nil }
 func (c *testConfig) Name() string { return "config" }
 
 func (c *testConfig) GetDB() Config {
-	return Config{Connect: "mongodb://localhost:27017/?w=majority", Database: "consensus_test", LogCollection: "log"}
+	return Config{
+		Connect:           "mongodb://localhost:27017/?w=majority",
+		Database:          "consensus_test",
+		LogCollection:     "log",
+		PayloadCollection: "payloads",
+	}
 }

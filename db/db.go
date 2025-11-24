@@ -53,6 +53,7 @@ type Service interface {
 type service struct {
 	conf           Config
 	logColl        *mongo.Collection
+	payloadColl    *mongo.Collection
 	settingsColl   *mongo.Collection
 	running        bool
 	changeReceiver ChangeReceiver
@@ -82,18 +83,68 @@ func (s *service) Run(ctx context.Context) (err error) {
 		return err
 	}
 	s.logColl = client.Database(s.conf.Database).Collection(s.conf.LogCollection)
+	s.settingsColl = client.Database(s.conf.Database).Collection(settingsColl)
+
+	// Initialize payloads collection (default to "payloads" if not configured)
+	payloadCollName := s.conf.PayloadCollection
+	if payloadCollName == "" {
+		payloadCollName = "payloads"
+	}
+	s.payloadColl = client.Database(s.conf.Database).Collection(payloadCollName)
+
+	// Run migration before marking service as running
+	if err = s.RunMigration(ctx); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
 	s.running = true
 	if s.changeReceiver != nil {
 		if err = s.runStreamListener(ctx); err != nil {
 			return err
 		}
 	}
-	s.settingsColl = client.Database(s.conf.Database).Collection(settingsColl)
 	return
 }
 
 func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
-	_, err = s.logColl.InsertOne(ctx, l)
+	// Make a copy to avoid modifying the input parameter
+	logToStore := consensus.Log{
+		Id:      l.Id,
+		Records: make([]consensus.Record, len(l.Records)),
+	}
+	copy(logToStore.Records, l.Records)
+
+	// Process records to store payloads in content-addressable storage
+	for i := range logToStore.Records {
+		record := &logToStore.Records[i]
+		if len(record.Payload) > 0 {
+			hash := computePayloadHash(record.Payload)
+
+			// Store payload with hash as _id (upsert to handle duplicates)
+			payload := consensus.Payload{
+				Hash: hash,
+				Data: record.Payload,
+			}
+
+			opts := options.Update().SetUpsert(true)
+			_, err = s.payloadColl.UpdateOne(
+				ctx,
+				bson.M{"_id": hash},
+				bson.M{"$setOnInsert": payload},
+				opts,
+			)
+			if err != nil {
+				log.Error("failed to store payload in AddLog", zap.Error(err))
+				return consensuserr.ErrUnexpected
+			}
+
+			// Update record to use hash reference and clear embedded payload
+			record.PayloadHash = hash
+			record.Payload = nil
+		}
+	}
+
+	_, err = s.logColl.InsertOne(ctx, logToStore)
 	if mongo.IsDuplicateKeyError(err) {
 		return consensuserr.ErrLogExists
 	}
@@ -130,6 +181,33 @@ type updateOp struct {
 }
 
 func (s *service) AddRecord(ctx context.Context, logId string, record consensus.Record) (err error) {
+	// Store payload in content-addressable storage if present
+	if len(record.Payload) > 0 {
+		hash := computePayloadHash(record.Payload)
+
+		// Store payload with hash as _id (upsert to handle duplicates)
+		payload := consensus.Payload{
+			Hash: hash,
+			Data: record.Payload,
+		}
+
+		opts := options.Update().SetUpsert(true)
+		_, err = s.payloadColl.UpdateOne(
+			ctx,
+			bson.M{"_id": hash},
+			bson.M{"$setOnInsert": payload},
+			opts,
+		)
+		if err != nil {
+			log.Error("failed to store payload", zap.Error(err))
+			return consensuserr.ErrUnexpected
+		}
+
+		// Update record to use hash reference and clear embedded payload
+		record.PayloadHash = hash
+		record.Payload = nil
+	}
+
 	var upd updateOp
 	upd.Push.Records.Each = []consensus.Record{record}
 	result, err := s.logColl.UpdateOne(ctx, findRecordQuery{
@@ -155,7 +233,76 @@ func (s *service) FetchLog(ctx context.Context, logId string) (l consensus.Log, 
 		}
 		return
 	}
+
+	// Hydrate payloads for records that use content-addressable storage
+	if err = s.hydratePayloads(ctx, &l); err != nil {
+		return
+	}
+
 	return
+}
+
+// hydratePayloads fetches and populates payloads for all records in the log
+func (s *service) hydratePayloads(ctx context.Context, l *consensus.Log) error {
+	numRecords := len(l.Records)
+	if numRecords == 0 {
+		return nil
+	}
+
+	// Pre-allocate with capacity to avoid reallocations
+	// Worst case: all records have unique payloads
+	hashes := make([]string, 0, numRecords)
+	hashToIndices := make(map[string][]int, numRecords)
+
+	for i := range l.Records {
+		record := &l.Records[i]
+		if record.PayloadHash != "" {
+			if _, exists := hashToIndices[record.PayloadHash]; !exists {
+				hashes = append(hashes, record.PayloadHash)
+			}
+			hashToIndices[record.PayloadHash] = append(hashToIndices[record.PayloadHash], i)
+		}
+	}
+
+	if len(hashes) == 0 {
+		return nil
+	}
+
+	// Batch fetch all payloads
+	cursor, err := s.payloadColl.Find(ctx, bson.M{"_id": bson.M{"$in": hashes}})
+	if err != nil {
+		return fmt.Errorf("failed to fetch payloads: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	// Build hash -> payload map with known size
+	payloadMap := make(map[string][]byte, len(hashes))
+	for cursor.Next(ctx) {
+		var payload consensus.Payload
+		if err := cursor.Decode(&payload); err != nil {
+			return fmt.Errorf("failed to decode payload: %w", err)
+		}
+		payloadMap[payload.Hash] = payload.Data
+	}
+
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("cursor error: %w", err)
+	}
+
+	// Populate payloads in records
+	for hash, indices := range hashToIndices {
+		data, ok := payloadMap[hash]
+		if !ok {
+			return fmt.Errorf("payload not found for hash: %s", hash)
+		}
+		// Share the same []byte across all records with the same payload
+		// This is safe as long as records are read-only after fetching
+		for _, i := range indices {
+			l.Records[i].Payload = data
+		}
+	}
+
+	return nil
 }
 
 func (s *service) SetChangeReceiver(receiver ChangeReceiver) (err error) {
