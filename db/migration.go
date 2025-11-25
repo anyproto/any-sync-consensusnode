@@ -19,12 +19,13 @@ const (
 )
 
 type migrationFlag struct {
-	ID        string `bson:"_id"`
-	Completed bool   `bson:"completed"`
+	ID        string    `bson:"_id"`
+	Completed bool      `bson:"completed"`
 	Timestamp time.Time `bson:"timestamp"`
 }
 
-// RunMigration executes the one-time migration to content-addressable storage
+// RunMigration executes the one-time migration to content-addressable storage.
+// The migration is idempotent - safe to run concurrently from multiple nodes.
 func (s *service) RunMigration(ctx context.Context) error {
 	// Check if migration already completed
 	var flag migrationFlag
@@ -50,7 +51,7 @@ func (s *service) RunMigration(ctx context.Context) error {
 
 	if totalLogs == 0 {
 		// No logs to migrate, just set the flag
-		return s.setMigrationFlag(ctx)
+		return s.setMigrationCompleted(ctx)
 	}
 
 	// Stream logs one at a time to avoid loading everything into memory
@@ -90,7 +91,7 @@ func (s *service) RunMigration(ctx context.Context) error {
 	}
 
 	// Set migration flag
-	if err := s.setMigrationFlag(ctx); err != nil {
+	if err := s.setMigrationCompleted(ctx); err != nil {
 		return err
 	}
 
@@ -165,23 +166,20 @@ func (s *service) migrateLog(ctx context.Context, logDoc *consensus.Log) error {
 	return nil
 }
 
-// setMigrationFlag marks the migration as completed
-func (s *service) setMigrationFlag(ctx context.Context) error {
-	flag := migrationFlag{
-		ID:        migrationFlagKey,
-		Completed: true,
-		Timestamp: time.Now(),
-	}
-
+// setMigrationCompleted marks the migration as completed
+func (s *service) setMigrationCompleted(ctx context.Context) error {
 	opts := options.Update().SetUpsert(true)
 	_, err := s.settingsColl.UpdateOne(
 		ctx,
 		bson.M{"_id": migrationFlagKey},
-		bson.M{"$set": flag},
+		bson.M{"$set": bson.M{
+			"completed": true,
+			"timestamp": time.Now(),
+		}},
 		opts,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to set migration flag: %w", err)
+		return fmt.Errorf("failed to set migration completed: %w", err)
 	}
 
 	return nil

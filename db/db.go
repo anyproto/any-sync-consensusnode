@@ -352,7 +352,21 @@ func (s *service) streamListener(stream *mongo.ChangeStream) {
 			// here we have an unexpected error and should stop any operations to avoid an inconsistent state between db and cache
 			log.Fatal("stream decode error:", zap.Error(err))
 		}
-		s.changeReceiver(res.DocumentKey.Id, res.UpdateDescription.UpdateFields.Records)
+
+		// Hydrate payloads before propagating to change receiver
+		// Records from change stream contain PayloadHash but not Payload data
+		records := res.UpdateDescription.UpdateFields.Records
+		if len(records) > 0 {
+			tempLog := &consensus.Log{Records: records}
+			if err := s.hydratePayloads(s.streamCtx, tempLog); err != nil {
+				log.Error("failed to hydrate payloads for change stream",
+					zap.String("logId", res.DocumentKey.Id),
+					zap.Error(err))
+				continue
+			}
+		}
+
+		s.changeReceiver(res.DocumentKey.Id, records)
 	}
 }
 
