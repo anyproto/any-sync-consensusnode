@@ -200,7 +200,7 @@ func (m *mockDB) AddRecord(ctx context.Context, logId string, record consensus.R
 	return nil
 }
 
-func (m *mockDB) FetchLog(ctx context.Context, logId string) (log consensus.Log, err error) {
+func (m *mockDB) FetchLog(ctx context.Context, logId, afterRecordId string) (log consensus.Log, err error) {
 	return m.fetchLog(ctx, logId)
 }
 

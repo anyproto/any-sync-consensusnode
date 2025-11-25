@@ -2,16 +2,18 @@ package stream
 
 import (
 	"context"
-	consensus "github.com/anyproto/any-sync-consensusnode"
-	"github.com/anyproto/any-sync-consensusnode/db"
+	"sync/atomic"
+	"time"
+
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/app/ocache"
 	"github.com/anyproto/any-sync/metric"
 	"github.com/cheggaaa/mb/v3"
 	"go.uber.org/zap"
-	"sync/atomic"
-	"time"
+
+	consensus "github.com/anyproto/any-sync-consensusnode"
+	"github.com/anyproto/any-sync-consensusnode/db"
 )
 
 const CName = "consensus.stream"
@@ -104,7 +106,7 @@ func (s *service) loadLog(ctx context.Context, logId string) (value ocache.Objec
 			streams: make(map[uint64]*Stream),
 		}, nil
 	}
-	dbLog, err := s.db.FetchLog(ctx, logId)
+	dbLog, err := s.db.FetchLog(ctx, logId, "")
 	if err != nil {
 		return nil, err
 	}

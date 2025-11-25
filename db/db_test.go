@@ -19,20 +19,22 @@ func TestService_AddLog(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		fx := newFixture(t, nil)
 		defer fx.Finish(t)
+		rec := consensus.Record{
+			Id:      "recordOne",
+			PrevId:  "",
+			Payload: []byte("payload"),
+			Created: time.Now().Truncate(time.Second).UTC(),
+		}
 		log := consensus.Log{
 			Id: "logOne",
 			Records: []consensus.Record{
-				{
-					Id:      "recordOne",
-					PrevId:  "",
-					Payload: []byte("payload"),
-					Created: time.Now().Truncate(time.Second).UTC(),
-				},
+				rec,
 			},
 		}
 		require.NoError(t, fx.AddLog(ctx, log))
-		fetched, err := fx.FetchLog(ctx, log.Id)
+		fetched, err := fx.FetchLog(ctx, log.Id, "")
 		require.NoError(t, err)
+		log.Records[0] = rec
 		assert.Equal(t, log, fetched)
 	})
 	t.Run("duplicate error", func(t *testing.T) {
@@ -56,7 +58,7 @@ func TestService_DeleteLog(t *testing.T) {
 		}
 		require.NoError(t, fx.AddLog(ctx, log))
 		require.NoError(t, fx.DeleteLog(ctx, log.Id))
-		_, err := fx.FetchLog(ctx, log.Id)
+		_, err := fx.FetchLog(ctx, log.Id, "")
 		require.EqualError(t, err, consensuserr.ErrLogNotFound.Error())
 	})
 	t.Run("not found err", func(t *testing.T) {
@@ -120,7 +122,7 @@ func TestService_FetchLog(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		fx := newFixture(t, nil)
 		defer fx.Finish(t)
-		l, err := fx.FetchLog(ctx, "not exists")
+		l, err := fx.FetchLog(ctx, "not exists", "")
 		assert.Empty(t, l)
 		assert.ErrorIs(t, err, consensuserr.ErrLogNotFound)
 	})
@@ -228,13 +230,14 @@ func (fx *fixture) Finish(t *testing.T) {
 	if fx.cancel != nil {
 		fx.cancel()
 	}
-	coll := fx.Service.(*service).logColl
-	t.Log(coll.Drop(ctx))
+	_ = fx.Service.(*service).logColl.Drop(ctx)
+	_ = fx.Service.(*service).settingsColl.Drop(ctx)
+	_ = fx.Service.(*service).payloadColl.Drop(ctx)
 	assert.NoError(t, fx.a.Close(ctx))
 }
 
 func (fx *fixture) assertLogValid(t *testing.T, logId string, count int) {
-	log, err := fx.FetchLog(ctx, logId)
+	log, err := fx.FetchLog(ctx, logId, "")
 	require.NoError(t, err)
 	assertLogValid(t, log, count)
 }

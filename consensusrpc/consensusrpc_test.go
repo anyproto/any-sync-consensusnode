@@ -162,7 +162,7 @@ func TestConsensusRpc_LogWatch(t *testing.T) {
 	defer clStream.Close()
 
 	rec, _ := testRecord("")
-	fx.db.EXPECT().FetchLog(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, logId string) (consensus.Log, error) {
+	fx.db.EXPECT().FetchLog(gomock.Any(), gomock.Any(), "").DoAndReturn(func(ctx context.Context, logId, afterRecordId string) (consensus.Log, error) {
 		if logId == "logId" {
 			return consensus.Log{
 				Id: "logId",
