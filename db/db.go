@@ -99,7 +99,7 @@ func (s *service) Run(ctx context.Context) (err error) {
 	if _, err = s.payloadColl.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "logId", Value: 1}}}); err != nil {
 		return err
 	}
-	return
+	return s.runMigrations(ctx)
 }
 
 func (s *service) tx(ctx context.Context, f func(txCtx mongo.SessionContext) error) (err error) {
