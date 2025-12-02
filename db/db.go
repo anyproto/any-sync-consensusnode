@@ -211,6 +211,9 @@ func (s *service) AddRecord(ctx context.Context, logId string, record consensus.
 }
 
 func (s *service) savePayload(ctx context.Context, payload consensus.Payload) (err error) {
+	if payload.Payload == nil {
+		return fmt.Errorf("payload is nil")
+	}
 	_, err = s.payloadColl.InsertOne(ctx, payload)
 	if mongo.IsDuplicateKeyError(err) {
 		return nil
@@ -257,6 +260,12 @@ func (s *service) addPayloads(ctx context.Context, l consensus.Log, afterRecordI
 		}
 		if idx, ok := payloads[curRecord.Id]; ok {
 			res.Records[idx].Payload = curRecord.Payload
+		}
+	}
+
+	for _, rec := range res.Records {
+		if rec.Payload == nil {
+			return res, fmt.Errorf("payload not found for record %s", rec.Id)
 		}
 	}
 	return

@@ -76,23 +76,27 @@ func TestService_AddRecord(t *testing.T) {
 		defer fx.Finish(t)
 		var records = []consensus.Record{
 			{
-				Id:     "2",
-				PrevId: "1",
+				Id:      "2",
+				PrevId:  "1",
+				Payload: []byte("payload2"),
 			},
 			{
-				Id:     "3",
-				PrevId: "2",
+				Id:      "3",
+				PrevId:  "2",
+				Payload: []byte("payload3"),
 			},
 			{
-				Id:     "4",
-				PrevId: "3",
+				Id:      "4",
+				PrevId:  "3",
+				Payload: []byte("payload4"),
 			},
 		}
 		l := consensus.Log{
 			Id: "logTestRecords",
 			Records: []consensus.Record{
 				{
-					Id: "1",
+					Id:      "1",
+					Payload: []byte("payload1"),
 				},
 			},
 		}
@@ -109,12 +113,13 @@ func TestService_AddRecord(t *testing.T) {
 			Id: "logTestRecords",
 			Records: []consensus.Record{
 				{
-					Id: "1",
+					Id:      "1",
+					Payload: []byte("payload1"),
 				},
 			},
 		}
 		require.NoError(t, fx.AddLog(ctx, log))
-		assert.EqualError(t, fx.AddRecord(ctx, log.Id, consensus.Record{Id: "2", PrevId: "3"}), consensuserr.ErrConflict.Error())
+		assert.EqualError(t, fx.AddRecord(ctx, log.Id, consensus.Record{Id: "2", PrevId: "3", Payload: []byte("2")}), consensuserr.ErrConflict.Error())
 	})
 }
 
@@ -146,22 +151,26 @@ func TestService_ChangeReceive(t *testing.T) {
 			Id: "logTestStream",
 			Records: []consensus.Record{
 				{
-					Id: "1",
+					Id:      "1",
+					Payload: []byte("payload1"),
 				},
 			},
 		}
 		var records = []consensus.Record{
 			{
-				Id:     "2",
-				PrevId: "1",
+				Id:      "2",
+				PrevId:  "1",
+				Payload: []byte("payload2"),
 			},
 			{
-				Id:     "3",
-				PrevId: "2",
+				Id:      "3",
+				PrevId:  "2",
+				Payload: []byte("payload3"),
 			},
 			{
-				Id:     "4",
-				PrevId: "3",
+				Id:      "4",
+				PrevId:  "3",
+				Payload: []byte("payload4"),
 			},
 		}
 		require.NoError(t, fx.AddLog(ctx, l))
