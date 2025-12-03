@@ -100,18 +100,18 @@ func (mr *MockServiceMockRecorder) DeleteLog(ctx, logId any) *gomock.Call {
 }
 
 // FetchLog mocks base method.
-func (m *MockService) FetchLog(ctx context.Context, logId string) (consensus.Log, error) {
+func (m *MockService) FetchLog(ctx context.Context, logId, afterRecordId string) (consensus.Log, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchLog", ctx, logId)
+	ret := m.ctrl.Call(m, "FetchLog", ctx, logId, afterRecordId)
 	ret0, _ := ret[0].(consensus.Log)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FetchLog indicates an expected call of FetchLog.
-func (mr *MockServiceMockRecorder) FetchLog(ctx, logId any) *gomock.Call {
+func (mr *MockServiceMockRecorder) FetchLog(ctx, logId, afterRecordId any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchLog", reflect.TypeOf((*MockService)(nil).FetchLog), ctx, logId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchLog", reflect.TypeOf((*MockService)(nil).FetchLog), ctx, logId, afterRecordId)
 }
 
 // GetDeletionId mocks base method.
