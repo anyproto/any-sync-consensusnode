@@ -130,7 +130,7 @@ func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
 			}
 			l.Records[i].Payload = nil
 		}
-		_, err := s.logColl.InsertOne(ctx, l)
+		_, err := s.logColl.InsertOne(txCtx, l)
 		if err != nil {
 			if mongo.IsDuplicateKeyError(err) {
 				return consensuserr.ErrLogExists
@@ -181,7 +181,7 @@ type updateOp struct {
 func (s *service) AddRecord(ctx context.Context, logId string, record consensus.Record) error {
 	return s.tx(ctx, func(txCtx mongo.SessionContext) (err error) {
 		// save payload in a separate collection to avoid the one doc size limit
-		if err = s.savePayload(ctx, consensus.Payload{
+		if err = s.savePayload(txCtx, consensus.Payload{
 			Id:      record.Id,
 			LogId:   logId,
 			Payload: record.Payload,
@@ -193,7 +193,7 @@ func (s *service) AddRecord(ctx context.Context, logId string, record consensus.
 		var upd updateOp
 		record.Payload = nil
 		upd.Push.Records.Each = []consensus.Record{record}
-		result, err := s.logColl.UpdateOne(ctx, findRecordQuery{
+		result, err := s.logColl.UpdateOne(txCtx, findRecordQuery{
 			Id:           logId,
 			LastRecordId: record.PrevId,
 		}, upd)
@@ -228,10 +228,10 @@ func (s *service) FetchLog(ctx context.Context, logId, afterRecordId string) (l 
 		}
 		return
 	}
-	return s.addPayloads(ctx, l, afterRecordId)
+	return s.injectPayloads(ctx, l, afterRecordId)
 }
 
-func (s *service) addPayloads(ctx context.Context, l consensus.Log, afterRecordId string) (res consensus.Log, err error) {
+func (s *service) injectPayloads(ctx context.Context, l consensus.Log, afterRecordId string) (res consensus.Log, err error) {
 	var payloads = make(map[string]int, len(l.Records))
 	res = l
 	res.Records = l.Records[:0]
@@ -318,7 +318,7 @@ func (s *service) streamListener(stream *mongo.ChangeStream) {
 			// here we have an unexpected error and should stop any operations to avoid an inconsistent state between db and cache
 			log.Fatal("stream decode error:", zap.Error(err))
 		}
-		logWithRecords, err := s.addPayloads(s.streamCtx, consensus.Log{Id: res.DocumentKey.Id, Records: res.UpdateDescription.UpdateFields.Records}, "")
+		logWithRecords, err := s.injectPayloads(s.streamCtx, consensus.Log{Id: res.DocumentKey.Id, Records: res.UpdateDescription.UpdateFields.Records}, "")
 		if err != nil {
 			log.Error("failed to add payloads to log", zap.Error(err))
 			continue
