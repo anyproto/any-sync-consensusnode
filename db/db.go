@@ -89,17 +89,20 @@ func (s *service) Run(ctx context.Context) (err error) {
 	}
 	s.logColl = s.client.Database(s.conf.Database).Collection(s.conf.LogCollection)
 	s.running = true
-	if s.changeReceiver != nil {
-		if err = s.runStreamListener(ctx); err != nil {
-			return err
-		}
-	}
 	s.settingsColl = s.client.Database(s.conf.Database).Collection(settingsColl)
 	s.payloadColl = s.client.Database(s.conf.Database).Collection(payloadColl)
 	if _, err = s.payloadColl.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "logId", Value: 1}}}); err != nil {
 		return err
 	}
-	return s.runMigrations(ctx)
+	if err = s.runMigrations(ctx); err != nil {
+		return err
+	}
+	if s.changeReceiver != nil {
+		if err = s.runStreamListener(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *service) tx(ctx context.Context, f func(txCtx mongo.SessionContext) error) (err error) {
@@ -214,10 +217,12 @@ func (s *service) savePayload(ctx context.Context, payload consensus.Payload) (e
 	if payload.Payload == nil {
 		return fmt.Errorf("payload is nil")
 	}
-	_, err = s.payloadColl.InsertOne(ctx, payload)
-	if mongo.IsDuplicateKeyError(err) {
-		return nil
-	}
+	_, err = s.payloadColl.UpdateOne(
+		ctx,
+		bson.D{{"_id", payload.Id}},
+		bson.D{{"$setOnInsert", payload}},
+		options.Update().SetUpsert(true),
+	)
 	return
 }
 

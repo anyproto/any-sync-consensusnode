@@ -27,7 +27,7 @@ func (s *service) runMigrations(ctx context.Context) (err error) {
 		}
 		if version < Version2 {
 			st := time.Now()
-			log.Info("migrate", zap.Int("version", version))
+			log.Info("migrate", zap.Int("currentVersion", version))
 			err = s.migrateV2(txCtx)
 			if err != nil {
 				log.Warn("migration failed", zap.Duration("dur", time.Since(st)), zap.Error(err))
