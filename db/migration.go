@@ -59,7 +59,7 @@ func (s *service) migrateV2(ctx context.Context) (err error) {
 			return fmt.Errorf("failed to decode log: %w", err)
 		}
 		for i, rec := range l.Records {
-			if err = s.savePayload(ctx, consensus.Payload{Id: rec.Id, LogId: l.Id, Payload: rec.Payload}); err != nil {
+			if err = s.savePayload(ctx, consensus.NewPayload(l.Id, rec.Id, rec.Payload)); err != nil {
 				return fmt.Errorf("failed to save payload for record %s: %w", rec.Id, err)
 			}
 			l.Records[i].Payload = nil
