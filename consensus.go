@@ -1,6 +1,9 @@
 package consensus
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Log struct {
 	Id      string   `bson:"_id"`
@@ -15,8 +18,28 @@ type Record struct {
 	Created time.Time `bson:"created"`
 }
 
+func NewPayload(logId, recordId string, payload []byte) Payload {
+	return Payload{
+		Id:      logId + "/" + recordId,
+		Payload: payload,
+	}
+}
+
 type Payload struct {
 	Id      string `bson:"_id"`
-	LogId   string `bson:"logId"`
 	Payload []byte `bson:"payload"`
+}
+
+func (p Payload) RecordId() string {
+	if idx := strings.LastIndex(p.Id, "/"); idx >= 0 {
+		return p.Id[idx+1:]
+	}
+	return ""
+}
+
+func (p Payload) LogId() string {
+	if idx := strings.LastIndex(p.Id, "/"); idx >= 0 {
+		return p.Id[:idx]
+	}
+	return ""
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/anyproto/any-sync/app"
@@ -89,17 +90,18 @@ func (s *service) Run(ctx context.Context) (err error) {
 	}
 	s.logColl = s.client.Database(s.conf.Database).Collection(s.conf.LogCollection)
 	s.running = true
+	s.settingsColl = s.client.Database(s.conf.Database).Collection(settingsColl)
+	s.payloadColl = s.client.Database(s.conf.Database).Collection(payloadColl)
+
+	if err = s.runMigrations(ctx); err != nil {
+		return err
+	}
 	if s.changeReceiver != nil {
 		if err = s.runStreamListener(ctx); err != nil {
 			return err
 		}
 	}
-	s.settingsColl = s.client.Database(s.conf.Database).Collection(settingsColl)
-	s.payloadColl = s.client.Database(s.conf.Database).Collection(payloadColl)
-	if _, err = s.payloadColl.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "logId", Value: 1}}}); err != nil {
-		return err
-	}
-	return s.runMigrations(ctx)
+	return nil
 }
 
 func (s *service) tx(ctx context.Context, f func(txCtx mongo.SessionContext) error) (err error) {
@@ -121,11 +123,7 @@ func (s *service) tx(ctx context.Context, f func(txCtx mongo.SessionContext) err
 func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
 	return s.tx(ctx, func(txCtx mongo.SessionContext) error {
 		for i, record := range l.Records {
-			if err := s.savePayload(txCtx, consensus.Payload{
-				Id:      record.Id,
-				LogId:   l.Id,
-				Payload: record.Payload,
-			}); err != nil {
+			if err := s.savePayload(txCtx, consensus.NewPayload(l.Id, record.Id, record.Payload)); err != nil {
 				return err
 			}
 			l.Records[i].Payload = nil
@@ -181,11 +179,7 @@ type updateOp struct {
 func (s *service) AddRecord(ctx context.Context, logId string, record consensus.Record) error {
 	return s.tx(ctx, func(txCtx mongo.SessionContext) (err error) {
 		// save payload in a separate collection to avoid the one doc size limit
-		if err = s.savePayload(txCtx, consensus.Payload{
-			Id:      record.Id,
-			LogId:   logId,
-			Payload: record.Payload,
-		}); err != nil {
+		if err = s.savePayload(txCtx, consensus.NewPayload(logId, record.Id, record.Payload)); err != nil {
 			return err
 		}
 
@@ -214,10 +208,12 @@ func (s *service) savePayload(ctx context.Context, payload consensus.Payload) (e
 	if payload.Payload == nil {
 		return fmt.Errorf("payload is nil")
 	}
-	_, err = s.payloadColl.InsertOne(ctx, payload)
-	if mongo.IsDuplicateKeyError(err) {
-		return nil
-	}
+	_, err = s.payloadColl.UpdateOne(
+		ctx,
+		bson.D{{"_id", payload.Id}},
+		bson.D{{"$setOnInsert", payload}},
+		options.Update().SetUpsert(true),
+	)
 	return
 }
 
@@ -245,7 +241,8 @@ func (s *service) injectPayloads(ctx context.Context, l consensus.Log, afterReco
 		}
 	}
 
-	cur, err := s.payloadColl.Find(ctx, bson.D{{"logId", l.Id}})
+	regExpStr := "^" + regexp.QuoteMeta(l.Id) + "/+"
+	cur, err := s.payloadColl.Find(ctx, bson.D{{"_id", bson.D{{"$regex", regExpStr}}}})
 	if err != nil {
 		return
 	}
@@ -258,7 +255,7 @@ func (s *service) injectPayloads(ctx context.Context, l consensus.Log, afterReco
 		if err = cur.Decode(&curRecord); err != nil {
 			return
 		}
-		if idx, ok := payloads[curRecord.Id]; ok {
+		if idx, ok := payloads[curRecord.RecordId()]; ok {
 			res.Records[idx].Payload = curRecord.Payload
 		}
 	}

@@ -20,29 +20,35 @@ const (
 )
 
 func (s *service) runMigrations(ctx context.Context) (err error) {
-	return s.tx(ctx, func(txCtx mongo.SessionContext) error {
-		version, err := s.getDbVersion(txCtx)
+	var migrate func(ctx context.Context) error
+	err = s.tx(ctx, func(txCtx mongo.SessionContext) error {
+		ver, err := s.getDbVersion(txCtx)
 		if err != nil {
 			return fmt.Errorf("failed to get db version: %w", err)
 		}
-		if version < Version2 {
-			st := time.Now()
-			log.Info("migrate", zap.Int("version", version))
-			err = s.migrateV2(txCtx)
-			if err != nil {
-				log.Warn("migration failed", zap.Duration("dur", time.Since(st)), zap.Error(err))
-			} else {
-				log.Info("migration done", zap.Duration("dur", time.Since(st)))
-			}
+		if ver == Version2 {
+			return nil
 		}
-		if err != nil {
-			return fmt.Errorf("migration failed: %w", err)
+		if ver < Version2 {
+			migrate = s.migrateV2
 		}
 		if err = s.setDbVersion(txCtx, Version2); err != nil {
 			return fmt.Errorf("failed to set db version: %w", err)
 		}
 		return nil
 	})
+	if migrate != nil {
+		log.Info("running migration")
+		st := time.Now()
+		err = migrate(ctx)
+		if err == nil {
+			log.Info("migration done", zap.Duration("dur", time.Since(st)))
+		} else {
+			log.Warn("migration failed", zap.Duration("dur", time.Since(st)), zap.Error(err))
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *service) migrateV2(ctx context.Context) (err error) {
@@ -58,11 +64,18 @@ func (s *service) migrateV2(ctx context.Context) (err error) {
 		if err := cur.Decode(&l); err != nil {
 			return fmt.Errorf("failed to decode log: %w", err)
 		}
+		var updated bool
 		for i, rec := range l.Records {
-			if err = s.savePayload(ctx, consensus.Payload{Id: rec.Id, LogId: l.Id, Payload: rec.Payload}); err != nil {
-				return fmt.Errorf("failed to save payload for record %s: %w", rec.Id, err)
+			if rec.Payload != nil {
+				if err = s.savePayload(ctx, consensus.NewPayload(l.Id, rec.Id, rec.Payload)); err != nil {
+					return fmt.Errorf("failed to save payload for record %s: %w", rec.Id, err)
+				}
+				l.Records[i].Payload = nil
+				updated = true
 			}
-			l.Records[i].Payload = nil
+		}
+		if !updated {
+			continue
 		}
 		_, err = s.logColl.UpdateOne(ctx, bson.D{{"_id", l.Id}}, bson.D{{"$set", bson.D{{"records", l.Records}}}})
 		if err != nil {
