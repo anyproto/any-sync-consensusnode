@@ -154,7 +154,8 @@ func (s *service) DeleteLog(ctx context.Context, logId string) (err error) {
 		if res.DeletedCount == 0 {
 			return consensuserr.ErrLogNotFound
 		}
-		res, err = s.payloadColl.DeleteMany(txCtx, bson.D{{"logId", logId}})
+		regExpStr := "^" + regexp.QuoteMeta(logId) + "/+"
+		res, err = s.payloadColl.DeleteMany(txCtx, bson.D{{"_id", bson.D{{"$regex", regExpStr}}}})
 		if err != nil {
 			return err
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/bson"
 
 	consensus "github.com/anyproto/any-sync-consensusnode"
 )
@@ -55,11 +56,22 @@ func TestService_DeleteLog(t *testing.T) {
 		defer fx.Finish(t)
 		log := consensus.Log{
 			Id: "logOne",
+			Records: []consensus.Record{
+				{
+					Id:      "recordOne",
+					PrevId:  "",
+					Payload: []byte("payload"),
+					Created: time.Now().Truncate(time.Second).UTC(),
+				},
+			},
 		}
 		require.NoError(t, fx.AddLog(ctx, log))
 		require.NoError(t, fx.DeleteLog(ctx, log.Id))
 		_, err := fx.FetchLog(ctx, log.Id, "")
 		require.EqualError(t, err, consensuserr.ErrLogNotFound.Error())
+		count, err := fx.Service.(*service).payloadColl.CountDocuments(ctx, bson.D{{}})
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), count)
 	})
 	t.Run("not found err", func(t *testing.T) {
 		fx := newFixture(t, nil)
