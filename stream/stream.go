@@ -43,43 +43,57 @@ func (s *Stream) WaitLogs() []consensus.Log {
 // WatchIds adds given ids to subscription
 func (s *Stream) WatchIds(ctx context.Context, logIds []string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var newIds []string
 	for _, logId := range logIds {
 		if _, ok := s.logIds[logId]; !ok {
 			s.logIds[logId] = struct{}{}
-			if addErr := s.s.AddStream(ctx, logId, s); addErr != nil {
-				log.Info("can't add stream for log", zap.String("logId", logId), zap.Error(addErr))
-				_ = s.mb.Add(ctx, consensus.Log{
-					Id:  logId,
-					Err: addErr,
-				})
-			}
+			newIds = append(newIds, logId)
 		}
 	}
-	return
+	s.mu.Unlock()
+
+	for _, logId := range newIds {
+		if addErr := s.s.AddStream(ctx, logId, s); addErr != nil {
+			log.Info("can't add stream for log", zap.String("logId", logId), zap.Error(addErr))
+			_ = s.mb.Add(ctx, consensus.Log{
+				Id:  logId,
+				Err: addErr,
+			})
+		}
+	}
 }
 
 // UnwatchIds removes given ids from subscription
 func (s *Stream) UnwatchIds(ctx context.Context, logIds []string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var removeIds []string
 	for _, logId := range logIds {
 		if _, ok := s.logIds[logId]; ok {
 			delete(s.logIds, logId)
-			if remErr := s.s.RemoveStream(ctx, logId, s.id); remErr != nil {
-				log.Warn("can't remove stream for log", zap.String("logId", logId), zap.Error(remErr))
-			}
+			removeIds = append(removeIds, logId)
 		}
 	}
-	return
+	s.mu.Unlock()
+
+	for _, logId := range removeIds {
+		if remErr := s.s.RemoveStream(ctx, logId, s.id); remErr != nil {
+			log.Warn("can't remove stream for log", zap.String("logId", logId), zap.Error(remErr))
+		}
+	}
 }
 
 // Close closes stream and unsubscribes all ids
 func (s *Stream) Close() {
 	_ = s.mb.Close()
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	logIds := make([]string, 0, len(s.logIds))
 	for logId := range s.logIds {
+		logIds = append(logIds, logId)
+	}
+	s.logIds = make(map[string]struct{})
+	s.mu.Unlock()
+
+	for _, logId := range logIds {
 		_ = s.s.RemoveStream(context.TODO(), logId, s.id)
 	}
 }

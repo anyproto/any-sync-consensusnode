@@ -20,15 +20,21 @@ type object struct {
 // The records source is db and called via stream.Service
 func (o *object) AddRecords(recs []consensus.Record) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	if len(recs) <= len(o.records) {
+		o.mu.Unlock()
 		return
 	}
 	diff := recs[0 : len(recs)-len(o.records)]
 	o.records = recs
+	streams := make([]*Stream, 0, len(o.streams))
 	for _, st := range o.streams {
-		_ = st.AddRecords(o.logId, diff)
+		streams = append(streams, st)
+	}
+	logId := o.logId
+	o.mu.Unlock()
+
+	for _, st := range streams {
+		_ = st.AddRecords(logId, diff)
 	}
 }
 
@@ -42,10 +48,11 @@ func (o *object) Records() []consensus.Record {
 // AddStream adds stream to the object
 func (o *object) AddStream(s *Stream) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.streams[s.id] = s
-	_ = s.AddRecords(o.logId, o.records)
-	return
+	records := o.records
+	logId := o.logId
+	o.mu.Unlock()
+	_ = s.AddRecords(logId, records)
 }
 
 // RemoveStream remove stream from object
