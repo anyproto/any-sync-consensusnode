@@ -15,6 +15,7 @@ type Stream struct {
 	mu     sync.Mutex
 	mb     *mb.MB[consensus.Log]
 	s      *service
+	closed bool
 }
 
 // LogIds returns watched log ids
@@ -43,6 +44,10 @@ func (s *Stream) WaitLogs() []consensus.Log {
 // WatchIds adds given ids to subscription
 func (s *Stream) WatchIds(ctx context.Context, logIds []string) {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
 	var newIds []string
 	for _, logId := range logIds {
 		if _, ok := s.logIds[logId]; !ok {
@@ -59,7 +64,16 @@ func (s *Stream) WatchIds(ctx context.Context, logIds []string) {
 				Id:  logId,
 				Err: addErr,
 			})
+			continue
 		}
+		// If stream was closed while we were adding, undo the add to prevent leak
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			_ = s.s.RemoveStream(ctx, logId, s.id)
+			return
+		}
+		s.mu.Unlock()
 	}
 }
 
@@ -86,11 +100,15 @@ func (s *Stream) UnwatchIds(ctx context.Context, logIds []string) {
 func (s *Stream) Close() {
 	_ = s.mb.Close()
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
 	logIds := make([]string, 0, len(s.logIds))
 	for logId := range s.logIds {
 		logIds = append(logIds, logId)
 	}
-	s.logIds = make(map[string]struct{})
 	s.mu.Unlock()
 
 	for _, logId := range logIds {
