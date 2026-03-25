@@ -70,11 +70,14 @@ func (s *service) Run(ctx context.Context) (err error) {
 }
 
 func (s *service) NewStream() *Stream {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Stream{
 		id:     atomic.AddUint64(&s.lastStreamId, 1),
 		logIds: make(map[string]struct{}),
 		mb:     mb.New[consensus.Log](100),
 		s:      s,
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 

@@ -16,6 +16,8 @@ type Stream struct {
 	mb     *mb.MB[consensus.Log]
 	s      *service
 	closed bool
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // LogIds returns watched log ids
@@ -31,7 +33,7 @@ func (s *Stream) LogIds() []string {
 
 // AddRecords adds new records to stream, called by objects
 func (s *Stream) AddRecords(logId string, records []consensus.Record) (err error) {
-	return s.mb.Add(context.TODO(), consensus.Log{Id: logId, Records: records})
+	return s.mb.Add(s.ctx, consensus.Log{Id: logId, Records: records})
 }
 
 // WaitLogs wait for new log records
@@ -98,6 +100,7 @@ func (s *Stream) UnwatchIds(ctx context.Context, logIds []string) {
 
 // Close closes stream and unsubscribes all ids
 func (s *Stream) Close() {
+	s.cancel()
 	_ = s.mb.Close()
 	s.mu.Lock()
 	if s.closed {
