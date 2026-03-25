@@ -88,10 +88,15 @@ func (s *service) Run(ctx context.Context) (err error) {
 	if err = s.client.Ping(pingCtx, readpref.Primary()); err != nil {
 		return err
 	}
-	s.logColl = s.client.Database(s.conf.Database).Collection(s.conf.LogCollection)
+	db := s.client.Database(s.conf.Database)
+	s.logColl = db.Collection(s.conf.LogCollection)
 	s.running = true
-	s.settingsColl = s.client.Database(s.conf.Database).Collection(settingsColl)
-	s.payloadColl = s.client.Database(s.conf.Database).Collection(payloadColl)
+	s.settingsColl = db.Collection(settingsColl)
+	s.payloadColl = db.Collection(payloadColl)
+
+	if err = s.ensureCollections(ctx, db); err != nil {
+		return err
+	}
 
 	if err = s.runMigrations(ctx); err != nil {
 		return err
@@ -99,6 +104,25 @@ func (s *service) Run(ctx context.Context) (err error) {
 	if s.changeReceiver != nil {
 		if err = s.runStreamListener(ctx); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// ensureCollections explicitly creates collections that are used inside
+// transactions. MongoDB cannot implicitly create collections within
+// multi-document transactions; concurrent attempts to do so result in
+// WriteConflict errors. Creating them upfront eliminates the race.
+func (s *service) ensureCollections(ctx context.Context, db *mongo.Database) error {
+	for _, name := range []string{s.conf.LogCollection, settingsColl, payloadColl} {
+		if err := db.CreateCollection(ctx, name); err != nil {
+			// MongoDB < 7.0 returns NamespaceExists (code 48) when the
+			// collection already exists. Starting with 7.0 the server
+			// returns success instead.
+			if cmdErr, ok := err.(mongo.CommandError); ok && cmdErr.Code == 48 {
+				continue
+			}
+			return fmt.Errorf("create collection %q: %w", name, err)
 		}
 	}
 	return nil
@@ -138,7 +162,6 @@ func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
 		}
 		return nil
 	})
-
 }
 
 type findLogQuery struct {
@@ -229,10 +252,10 @@ func (s *service) FetchLog(ctx context.Context, logId, afterRecordId string) (l 
 }
 
 func (s *service) injectPayloads(ctx context.Context, l consensus.Log, afterRecordId string) (res consensus.Log, err error) {
-	var payloads = make(map[string]int, len(l.Records))
+	payloads := make(map[string]int, len(l.Records))
 	res = l
 	res.Records = l.Records[:0]
-	var add = afterRecordId == ""
+	add := afterRecordId == ""
 	for _, record := range l.Records {
 		if add {
 			res.Records = append(res.Records, record)

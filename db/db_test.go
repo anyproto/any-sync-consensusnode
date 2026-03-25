@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -221,6 +222,49 @@ func TestService_SetDeletionId(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "123", logId)
 	})
+}
+
+// TestService_AddLog_ConcurrentOnFreshDB verifies that concurrent AddLog
+// calls succeed even when the database is fresh and collections have not
+// been created yet. Without explicit collection pre-creation in Run(),
+// MongoDB raises a WriteConflict because concurrent transactions attempt
+// to implicitly create the "payload" collection at the same time.
+func TestService_AddLog_ConcurrentOnFreshDB(t *testing.T) {
+	fx := newFixture(t, nil)
+	defer fx.Finish(t)
+
+	// Simulate a fresh install: drop all collections so the
+	// "payload" collection does not exist yet.
+	s := fx.Service.(*service)
+	_ = s.logColl.Drop(ctx)
+	_ = s.settingsColl.Drop(ctx)
+	_ = s.payloadColl.Drop(ctx)
+
+	// Re-run ensureCollections as Run() would on a real fresh start.
+	db := s.client.Database(s.conf.Database)
+	if err := s.ensureCollections(ctx, db); err != nil {
+		t.Fatalf("ensureCollections: %v", err)
+	}
+
+	const n = 5
+	errs := make(chan error, n)
+
+	for i := range n {
+		go func() {
+			errs <- fx.AddLog(ctx, consensus.Log{
+				Id: fmt.Sprintf("concurrent-log-%d", i),
+				Records: []consensus.Record{{
+					Id:      fmt.Sprintf("rec-%d", i),
+					Payload: []byte("data"),
+				}},
+			})
+		}()
+	}
+
+	for i := range n {
+		err := <-errs
+		assert.NoError(t, err, "AddLog #%d should succeed", i)
+	}
 }
 
 func newFixture(t *testing.T, cr ChangeReceiver) *fixture {
