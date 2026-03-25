@@ -1,9 +1,13 @@
 package stream
 
 import (
-	consensus "github.com/anyproto/any-sync-consensusnode"
+	"context"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
+
+	consensus "github.com/anyproto/any-sync-consensusnode"
 )
 
 // object is a cache entry that holds the actual log state and maintains added streams
@@ -20,21 +24,19 @@ type object struct {
 // The records source is db and called via stream.Service
 func (o *object) AddRecords(recs []consensus.Record) {
 	o.mu.Lock()
+	defer o.mu.Unlock()
+
 	if len(recs) <= len(o.records) {
-		o.mu.Unlock()
 		return
 	}
 	diff := recs[0 : len(recs)-len(o.records)]
 	o.records = recs
-	streams := make([]*Stream, 0, len(o.streams))
 	for _, st := range o.streams {
-		streams = append(streams, st)
-	}
-	logId := o.logId
-	o.mu.Unlock()
-
-	for _, st := range streams {
-		_ = st.AddRecords(logId, diff)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := st.AddRecords(ctx, o.logId, diff); err != nil {
+			log.Warn("slow consumer: failed to add records to stream", zap.String("logId", o.logId), zap.Uint64("streamId", st.id), zap.Error(err))
+		}
+		cancel()
 	}
 }
 
@@ -48,11 +50,14 @@ func (o *object) Records() []consensus.Record {
 // AddStream adds stream to the object
 func (o *object) AddStream(s *Stream) {
 	o.mu.Lock()
+	defer o.mu.Unlock()
 	o.streams[s.id] = s
-	records := o.records
-	logId := o.logId
-	o.mu.Unlock()
-	_ = s.AddRecords(logId, records)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := s.AddRecords(ctx, o.logId, o.records); err != nil {
+		log.Warn("slow consumer: failed to send initial records", zap.String("logId", o.logId), zap.Uint64("streamId", s.id), zap.Error(err))
+	}
+	cancel()
+	return
 }
 
 // RemoveStream remove stream from object
