@@ -2,10 +2,11 @@ package stream
 
 import (
 	"context"
+	"sync"
+
 	consensus "github.com/anyproto/any-sync-consensusnode"
 	"github.com/cheggaaa/mb/v3"
 	"go.uber.org/zap"
-	"sync"
 )
 
 // Stream is a buffer that receives updates from object and gives back to a client
@@ -31,7 +32,7 @@ func (s *Stream) LogIds() []string {
 	return logIds
 }
 
-// AddRecords adds new records to stream, called by objects
+// AddRecords adds new records to stream, called by objects.
 func (s *Stream) AddRecords(logId string, records []consensus.Record) (err error) {
 	return s.mb.Add(s.ctx, consensus.Log{Id: logId, Records: records})
 }
