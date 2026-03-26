@@ -4,7 +4,7 @@ account:
   signingKey: 5Btn70kUmMokNhSDhu3GzuFcbLxK9aRnoyb/zPWkLvu7svtWJZxQDJ5AWYZ4TxGhgb/GbZB1nPjp7Kz+V+J4OQ==
 mongo:
   connect: mongodb://localhost:27017/?w=majority
-  database: consensus
+  database: consensus_prod
   logCollection: log
 metric:
   addr: ""
@@ -15,12 +15,12 @@ drpc:
   snappy: true
 yamux:
   listenAddrs:
-    - 127.0.0.1:4530
+    - 127.0.0.1:4531
   writeTimeoutSec: 10
   dialTimeoutSec: 10
 quic:
   listenAddrs:
-    - 127.0.0.1:5530
+    - 127.0.0.1:5531
   writeTimeoutSec: 10
   dialTimeoutSec: 10
 network:
