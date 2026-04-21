@@ -8,6 +8,7 @@ import (
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/metric"
 	"github.com/anyproto/any-sync/net/rpc"
+	"github.com/anyproto/any-sync/net/secureservice"
 	"github.com/anyproto/any-sync/net/transport/quic"
 	"github.com/anyproto/any-sync/net/transport/yamux"
 	"github.com/anyproto/any-sync/nodeconf"
@@ -43,6 +44,7 @@ type Config struct {
 	Yamux                    yamux.Config           `yaml:"yamux"`
 	Quic                     quic.Config            `yaml:"quic"`
 	Deletion                 deletelog.Config       `yaml:"deletion"`
+	Secure                   secureservice.Config   `yaml:"secure"`
 }
 
 func (c *Config) Init(a *app.App) (err error) {
@@ -95,4 +97,8 @@ func (c Config) GetDeletion() deletelog.Config {
 
 func (c Config) GetDB() db.Config {
 	return c.Mongo
+}
+
+func (c Config) GetSecureService() secureservice.Config {
+	return c.Secure
 }
