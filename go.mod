@@ -4,7 +4,7 @@ go 1.25.7
 
 require (
 	github.com/ahmetb/govvv v0.3.0
-	github.com/anyproto/any-sync v0.13.0-alpha.1
+	github.com/anyproto/any-sync v0.13.0-alpha.5.0.20260710230326-2c00c2b7f186
 	github.com/cheggaaa/mb/v3 v3.0.2
 	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.17.9
@@ -23,9 +23,6 @@ require (
 	github.com/anyproto/go-slip10 v1.0.1 // indirect
 	github.com/anyproto/go-slip21 v1.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/btcsuite/btcd v0.22.1 // indirect
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
-	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
