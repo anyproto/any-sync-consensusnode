@@ -2,12 +2,14 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/app/ocache"
+	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"github.com/anyproto/any-sync/metric"
 	"github.com/cheggaaa/mb/v3"
 	"go.uber.org/zap"
@@ -22,6 +24,9 @@ var log = logger.NewNamed(CName)
 
 var (
 	cacheTTL = time.Minute
+	// resyncRetryWait and maxResyncRetryWait define the linear backoff between the resync attempts
+	resyncRetryWait    = time.Second
+	maxResyncRetryWait = time.Second * 30
 )
 
 type ctxLog uint
@@ -58,7 +63,10 @@ func (s *service) Init(a *app.App) (err error) {
 	}
 	s.cache = ocache.New(s.loadLog, cacheOpts...)
 
-	return s.db.SetChangeReceiver(s.receiveChange)
+	if err = s.db.SetChangeReceiver(s.receiveChange); err != nil {
+		return
+	}
+	return s.db.SetResetReceiver(s.resync)
 }
 
 func (s *service) Name() (name string) {
@@ -118,6 +126,71 @@ func (s *service) loadLog(ctx context.Context, logId string) (value ocache.Objec
 		records: dbLog.Records,
 		streams: make(map[uint64]*Stream),
 	}, nil
+}
+
+// resync reloads every cached log from the db and sends the missed records to the subscribed streams.
+// It is called when the db change stream was interrupted: the updates made while it was down are never
+// replayed, so without a resync the cache would stay behind the db forever and would serve stale records
+// to every new subscriber.
+//
+// A log that fails to resync is retried: it is pinned in the cache by its streams, so it is never evicted
+// and reloaded, and giving up on it would leave it stale for good.
+func (s *service) resync(ctx context.Context) {
+	var objects []*object
+	s.cache.ForEach(func(v ocache.Object) bool {
+		objects = append(objects, v.(*object))
+		return true
+	})
+	if len(objects) == 0 {
+		return
+	}
+	log.Info("resyncing logs with the db", zap.Int("count", len(objects)))
+	for attempt := 0; ; attempt++ {
+		if !waitBeforeRetry(ctx, attempt) {
+			log.Warn("resync is interrupted", zap.Int("notSynced", len(objects)))
+			return
+		}
+		var failed []*object
+		for _, obj := range objects {
+			dbLog, err := s.db.FetchLog(ctx, obj.logId, "")
+			if err != nil {
+				if errors.Is(err, consensuserr.ErrLogNotFound) {
+					// the log is deleted, there is nothing to resync it with
+					continue
+				}
+				log.Error("resync: can't fetch log", zap.String("logId", obj.logId), zap.Error(err))
+				failed = append(failed, obj)
+				continue
+			}
+			obj.AddRecords(dbLog.Records)
+		}
+		if len(failed) == 0 {
+			return
+		}
+		log.Error("resync: some logs are not synced, retrying", zap.Int("count", len(failed)))
+		objects = failed
+	}
+}
+
+// waitBeforeRetry waits before the given resync attempt, the first one is immediate.
+// It returns false if the ctx is done.
+func waitBeforeRetry(ctx context.Context, attempt int) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	if attempt <= 0 {
+		return true
+	}
+	waitTime := time.Duration(attempt) * resyncRetryWait
+	if waitTime > maxResyncRetryWait {
+		waitTime = maxResyncRetryWait
+	}
+	select {
+	case <-time.After(waitTime):
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func (s *service) receiveChange(logId string, records []consensus.Record) {
