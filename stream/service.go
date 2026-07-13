@@ -58,7 +58,10 @@ func (s *service) Init(a *app.App) (err error) {
 	}
 	s.cache = ocache.New(s.loadLog, cacheOpts...)
 
-	return s.db.SetChangeReceiver(s.receiveChange)
+	if err = s.db.SetChangeReceiver(s.receiveChange); err != nil {
+		return
+	}
+	return s.db.SetResetReceiver(s.resync)
 }
 
 func (s *service) Name() (name string) {
@@ -115,6 +118,27 @@ func (s *service) loadLog(ctx context.Context, logId string) (value ocache.Objec
 		records: dbLog.Records,
 		streams: make(map[uint64]*Stream),
 	}, nil
+}
+
+// resync reloads every cached log from the db and sends the missed records to the subscribed streams.
+// It is called when the db change stream was interrupted: the updates made while it was down are never
+// replayed, so without a resync the cache would stay behind the db forever and would serve stale records
+// to every new subscriber.
+func (s *service) resync() {
+	var objects []*object
+	s.cache.ForEach(func(v ocache.Object) bool {
+		objects = append(objects, v.(*object))
+		return true
+	})
+	log.Info("resyncing logs with the db", zap.Int("count", len(objects)))
+	for _, obj := range objects {
+		dbLog, err := s.db.FetchLog(context.Background(), obj.logId, "")
+		if err != nil {
+			log.Error("resync: can't fetch log", zap.String("logId", obj.logId), zap.Error(err))
+			continue
+		}
+		obj.AddRecords(dbLog.Records)
+	}
 }
 
 func (s *service) receiveChange(logId string, records []consensus.Record) {

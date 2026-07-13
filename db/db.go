@@ -26,6 +26,9 @@ const CName = "consensus.db"
 const (
 	settingsColl = "settings"
 	payloadColl  = "payload"
+
+	// maxReconnectWait is the upper bound, in seconds, of the wait between change stream reconnect attempts
+	maxReconnectWait = 30
 )
 
 var log = logger.NewNamed(CName)
@@ -35,6 +38,10 @@ func New() Service {
 }
 
 type ChangeReceiver func(logId string, records []consensus.Record)
+
+// ResetReceiver is called when the change stream has been re-established after an interruption.
+// Changes made while the stream was down are not replayed, so the receiver must resync from the db.
+type ResetReceiver func()
 
 type Service interface {
 	// AddLog adds new log db
@@ -48,6 +55,9 @@ type Service interface {
 	FetchLog(ctx context.Context, logId, afterRecordId string) (log consensus.Log, err error)
 	// SetChangeReceiver sets the receiver for updates, it must be called before app.Run stage
 	SetChangeReceiver(receiver ChangeReceiver) (err error)
+	// SetResetReceiver sets the receiver that is called when the change stream was interrupted
+	// and updates could have been missed, it must be called before app.Run stage
+	SetResetReceiver(receiver ResetReceiver) (err error)
 	// SetDeletionId sets the last deleted log id
 	SetDeletionId(ctx context.Context, lastId string) (err error)
 	// GetDeletionId gets the last deletion log id
@@ -63,6 +73,7 @@ type service struct {
 	running      bool
 
 	changeReceiver ChangeReceiver
+	resetReceiver  ResetReceiver
 	streamCtx      context.Context
 	streamCancel   context.CancelFunc
 	listenerDone   chan struct{}
@@ -277,6 +288,14 @@ func (s *service) SetChangeReceiver(receiver ChangeReceiver) (err error) {
 	return
 }
 
+func (s *service) SetResetReceiver(receiver ResetReceiver) (err error) {
+	if s.running {
+		return fmt.Errorf("set receiver must be called before Run")
+	}
+	s.resetReceiver = receiver
+	return
+}
+
 type matchPipeline struct {
 	Match struct {
 		OT string `bson:"operationType"`
@@ -284,16 +303,22 @@ type matchPipeline struct {
 }
 
 func (s *service) runStreamListener(ctx context.Context) (err error) {
-	var mp matchPipeline
-	mp.Match.OT = "update"
-	stream, err := s.logColl.Watch(ctx, []matchPipeline{mp})
+	s.streamCtx, s.streamCancel = context.WithCancel(context.Background())
+	// the change stream must outlive the Run context, so it is opened with the stream context
+	stream, err := s.watchLog(s.streamCtx)
 	if err != nil {
+		s.streamCancel()
 		return
 	}
 	s.listenerDone = make(chan struct{})
-	s.streamCtx, s.streamCancel = context.WithCancel(context.Background())
 	go s.streamListener(stream)
 	return
+}
+
+func (s *service) watchLog(ctx context.Context) (*mongo.ChangeStream, error) {
+	var mp matchPipeline
+	mp.Match.OT = "update"
+	return s.logColl.Watch(ctx, []matchPipeline{mp})
 }
 
 type streamResult struct {
@@ -309,19 +334,61 @@ type streamResult struct {
 
 func (s *service) streamListener(stream *mongo.ChangeStream) {
 	defer close(s.listenerDone)
-	for stream.Next(s.streamCtx) {
-		var res streamResult
-		if err := stream.Decode(&res); err != nil {
-			// mongo driver maintains connections and handles reconnects so that the stream will work as usual in these cases
-			// here we have an unexpected error and should stop any operations to avoid an inconsistent state between db and cache
-			log.Fatal("stream decode error:", zap.Error(err))
+	for {
+		for stream.Next(s.streamCtx) {
+			var res streamResult
+			if err := stream.Decode(&res); err != nil {
+				// mongo driver maintains connections and handles reconnects so that the stream will work as usual in these cases
+				// here we have an unexpected error and should stop any operations to avoid an inconsistent state between db and cache
+				log.Fatal("stream decode error:", zap.Error(err))
+			}
+			logWithRecords, err := s.injectPayloads(s.streamCtx, consensus.Log{Id: res.DocumentKey.Id, Records: res.UpdateDescription.UpdateFields.Records}, "")
+			if err != nil {
+				log.Error("failed to add payloads to log", zap.Error(err))
+				continue
+			}
+			s.changeReceiver(res.DocumentKey.Id, logWithRecords.Records)
 		}
-		logWithRecords, err := s.injectPayloads(s.streamCtx, consensus.Log{Id: res.DocumentKey.Id, Records: res.UpdateDescription.UpdateFields.Records}, "")
-		if err != nil {
-			log.Error("failed to add payloads to log", zap.Error(err))
-			continue
+		// the driver resumes the stream itself while it can, so getting here means the stream is done for good:
+		// either we are closing, or it ended with a non-resumable error or an invalidate event
+		err := stream.Err()
+		_ = stream.Close(s.streamCtx)
+		if s.streamCtx.Err() != nil {
+			return
 		}
-		s.changeReceiver(res.DocumentKey.Id, logWithRecords.Records)
+		log.Warn("change stream is closed, reconnecting", zap.Error(err))
+		if stream = s.reopenStream(); stream == nil {
+			return
+		}
+		// changes made while the stream was down are lost, the cache must be resynced with the db
+		if s.resetReceiver != nil {
+			s.resetReceiver()
+		}
+	}
+}
+
+// reopenStream reopens the change stream, retrying until it succeeds. It returns nil if the service is closing.
+func (s *service) reopenStream() (stream *mongo.ChangeStream) {
+	var attempt int
+	for {
+		var err error
+		if stream, err = s.watchLog(s.streamCtx); err == nil {
+			log.Info("change stream is reconnected")
+			return stream
+		}
+		if s.streamCtx.Err() != nil {
+			return nil
+		}
+		if attempt < maxReconnectWait {
+			attempt++
+		}
+		waitTime := time.Duration(attempt) * time.Second
+		log.Error("can't reopen change stream", zap.Error(err), zap.Duration("waitTime", waitTime))
+		select {
+		case <-time.After(waitTime):
+		case <-s.streamCtx.Done():
+			return nil
+		}
 	}
 }
 
@@ -343,13 +410,14 @@ func (s *service) GetDeletionId(ctx context.Context) (lastId string, err error) 
 }
 
 func (s *service) Close(ctx context.Context) (err error) {
-	if s.client != nil {
-		err = s.client.Disconnect(ctx)
-		s.client = nil
-	}
+	// stop the listener before disconnecting, otherwise it would try to reconnect to a closed client
 	if s.listenerDone != nil {
 		s.streamCancel()
 		<-s.listenerDone
+	}
+	if s.client != nil {
+		err = s.client.Disconnect(ctx)
+		s.client = nil
 	}
 	return
 }
