@@ -204,6 +204,7 @@ func TestService_ChangeReceive(t *testing.T) {
 	})
 }
 
+// TestService_StreamListener_Reconnect: an interrupted change stream must not take the listener down with it
 func TestService_StreamListener_Reconnect(t *testing.T) {
 	var (
 		logs   = make(chan consensus.Log, 10)
@@ -211,7 +212,7 @@ func TestService_StreamListener_Reconnect(t *testing.T) {
 	)
 	fx := newFixtureReset(t, func(logId string, records []consensus.Record) {
 		logs <- consensus.Log{Id: logId, Records: records}
-	}, func() {
+	}, func(ctx context.Context) {
 		resets <- struct{}{}
 	})
 	defer fx.Finish(t)
@@ -227,34 +228,40 @@ func TestService_StreamListener_Reconnect(t *testing.T) {
 			Payload: []byte("payload2"),
 		}))
 	}
+	expectChange := func(logId string) {
+		t.Helper()
+		select {
+		case l := <-logs:
+			assert.Equal(t, logId, l.Id)
+		case <-time.After(time.Second * 10):
+			t.Fatalf("no change received for %s", logId)
+		}
+	}
 
 	// the change stream delivers updates
 	addLogWithRecord("logBefore")
-	select {
-	case l := <-logs:
-		assert.Equal(t, "logBefore", l.Id)
-	case <-time.After(time.Second * 5):
-		require.False(t, true, "no change received before the interruption")
-	}
+	expectChange("logBefore")
 
-	// dropping the watched collection invalidates the change stream, the driver can't resume it
+	// dropping the watched collection ends the change stream with an invalidate event
 	require.NoError(t, fx.Service.(*service).logColl.Drop(ctx))
 
-	// the listener must notice it, reconnect, and report that updates could have been missed
+	// the listener must notice it, reopen the stream, and report that updates could have been missed
 	select {
 	case <-resets:
 	case <-time.After(time.Second * 10):
-		require.False(t, true, "the change stream was not reconnected")
+		t.Fatal("the change stream was not reconnected")
 	}
 
-	// and it must keep delivering updates on the new stream
+	// and it must keep delivering updates on the reopened stream
 	addLogWithRecord("logAfter")
-	select {
-	case l := <-logs:
-		assert.Equal(t, "logAfter", l.Id)
-	case <-time.After(time.Second * 5):
-		require.False(t, true, "no change received after the reconnect")
-	}
+	expectChange("logAfter")
+}
+
+func TestReconnectWait(t *testing.T) {
+	assert.Equal(t, time.Duration(0), reconnectWait(0), "the first reconnect must be immediate")
+	assert.Equal(t, time.Second, reconnectWait(1))
+	assert.Equal(t, time.Second*2, reconnectWait(2))
+	assert.Equal(t, maxReconnectWait, reconnectWait(100), "the wait must be capped")
 }
 
 func TestService_SetDeletionId(t *testing.T) {

@@ -140,7 +140,7 @@ func TestService_NewStream(t *testing.T) {
 		setRecs([]consensus.Record{{Id: "2", PrevId: "1"}, {Id: "1"}})
 
 		// the change stream is re-established and reports that updates could have been missed
-		fx.mockDB.reset()
+		fx.mockDB.reset(ctx)
 
 		// a new subscriber (e.g. the coordinator reloading its acl cache) must see the record too
 		st2 := fx.NewStream()
@@ -164,6 +164,86 @@ func TestService_NewStream(t *testing.T) {
 		// and the cache is healed, so the new subscriber doesn't get a stale head
 		require.Len(t, sr2.logs[logId].Records, 2)
 		assert.Equal(t, "2", sr2.logs[logId].Records[0].Id)
+	})
+	t.Run("resync retries a log it failed to fetch", func(t *testing.T) {
+		// the resync runs right after mongo came back, so a fetch may well fail. Giving up on a log would
+		// leave it stale forever: it is pinned in the cache by its stream and is never reloaded
+		resyncRetryWait = time.Millisecond
+		defer func() {
+			resyncRetryWait = time.Second
+		}()
+		fx := newFixture(t)
+		defer fx.Finish(t)
+
+		var logId = "logId"
+		var (
+			mu    sync.Mutex
+			calls int
+		)
+		fx.mockDB.fetchLog = func(ctx context.Context, logId string) (log consensus.Log, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls++
+			switch {
+			case calls == 1: // the initial load of the subscription
+				return consensus.Log{Id: logId, Records: []consensus.Record{{Id: "1"}}}, nil
+			case calls <= 3: // the db is not ready yet
+				return consensus.Log{}, consensuserr.ErrUnexpected
+			default:
+				return consensus.Log{Id: logId, Records: []consensus.Record{{Id: "2", PrevId: "1"}, {Id: "1"}}}, nil
+			}
+		}
+
+		st1 := fx.NewStream()
+		sr1 := readStream(st1)
+		st1.WatchIds(ctx, []string{logId})
+
+		fx.mockDB.reset(ctx)
+
+		st1.Close()
+		select {
+		case <-time.After(time.Second / 3):
+			require.False(t, true, "timeout")
+		case <-sr1.finished:
+		}
+
+		require.Len(t, sr1.logs[logId].Records, 2)
+		assert.Equal(t, "2", sr1.logs[logId].Records[0].Id)
+	})
+	t.Run("resync doesn't retry a deleted log", func(t *testing.T) {
+		fx := newFixture(t)
+		defer fx.Finish(t)
+
+		var logId = "logId"
+		var (
+			mu    sync.Mutex
+			calls int
+		)
+		fx.mockDB.fetchLog = func(ctx context.Context, logId string) (log consensus.Log, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls++
+			if calls == 1 {
+				return consensus.Log{Id: logId, Records: []consensus.Record{{Id: "1"}}}, nil
+			}
+			return consensus.Log{}, consensuserr.ErrLogNotFound
+		}
+
+		st1 := fx.NewStream()
+		readStream(st1)
+		st1.WatchIds(ctx, []string{logId})
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			fx.mockDB.reset(ctx)
+		}()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			require.False(t, true, "resync is stuck on a deleted log")
+		}
+		st1.Close()
 	})
 	t.Run("error", func(t *testing.T) {
 		fx := newFixture(t)

@@ -27,8 +27,11 @@ const (
 	settingsColl = "settings"
 	payloadColl  = "payload"
 
-	// maxReconnectWait is the upper bound, in seconds, of the wait between change stream reconnect attempts
-	maxReconnectWait = 30
+	// maxReconnectWait is the upper bound of the wait between change stream reconnect attempts
+	maxReconnectWait = time.Second * 30
+	// healthyStreamTime is how long a change stream must live to be considered healthy, a stream that dies
+	// sooner keeps growing the reconnect backoff instead of resetting it
+	healthyStreamTime = time.Second * 10
 )
 
 var log = logger.NewNamed(CName)
@@ -41,7 +44,8 @@ type ChangeReceiver func(logId string, records []consensus.Record)
 
 // ResetReceiver is called when the change stream has been re-established after an interruption.
 // Changes made while the stream was down are not replayed, so the receiver must resync from the db.
-type ResetReceiver func()
+// The ctx is cancelled when the service is closing, the receiver must not outlive it.
+type ResetReceiver func(ctx context.Context)
 
 type Service interface {
 	// AddLog adds new log db
@@ -108,7 +112,7 @@ func (s *service) Run(ctx context.Context) (err error) {
 		return err
 	}
 	if s.changeReceiver != nil {
-		if err = s.runStreamListener(ctx); err != nil {
+		if err = s.runStreamListener(); err != nil {
 			return err
 		}
 	}
@@ -302,7 +306,7 @@ type matchPipeline struct {
 	} `bson:"$match"`
 }
 
-func (s *service) runStreamListener(ctx context.Context) (err error) {
+func (s *service) runStreamListener() (err error) {
 	s.streamCtx, s.streamCancel = context.WithCancel(context.Background())
 	// the change stream must outlive the Run context, so it is opened with the stream context
 	stream, err := s.watchLog(s.streamCtx)
@@ -333,8 +337,17 @@ type streamResult struct {
 }
 
 func (s *service) streamListener(stream *mongo.ChangeStream) {
-	defer close(s.listenerDone)
+	defer func() {
+		// the listener is the only thing that keeps the cache in sync with the db: if it ever stops while
+		// the service is running, the cache silently serves stale records forever, so fail loudly instead
+		if s.streamCtx.Err() == nil {
+			log.Fatal("change stream listener stopped unexpectedly")
+		}
+		close(s.listenerDone)
+	}()
+	var attempt int
 	for {
+		openedAt := time.Now()
 		for stream.Next(s.streamCtx) {
 			var res streamResult
 			if err := stream.Decode(&res); err != nil {
@@ -349,28 +362,40 @@ func (s *service) streamListener(stream *mongo.ChangeStream) {
 			}
 			s.changeReceiver(res.DocumentKey.Id, logWithRecords.Records)
 		}
-		// the driver resumes the stream itself while it can, so getting here means the stream is done for good:
-		// either we are closing, or it ended with a non-resumable error or an invalidate event
+		// the driver retries resumable errors itself, so getting here means the stream is done for good:
+		// either we are closing, or it ended with a non-resumable error, a failed resume or an invalidate event.
+		// Err must be read before Close, Close overwrites it
 		err := stream.Err()
 		_ = stream.Close(s.streamCtx)
 		if s.streamCtx.Err() != nil {
 			return
 		}
 		log.Warn("change stream is closed, reconnecting", zap.Error(err))
-		if stream = s.reopenStream(); stream == nil {
+		// a stream that lived long enough is reconnected without a delay, but one that dies right after
+		// being opened must not be reopened in a tight loop
+		if time.Since(openedAt) >= healthyStreamTime {
+			attempt = 0
+		}
+		// the stream is not resumed from the last token on purpose: the pipeline filters out the invalidate
+		// event, so the token can never move past it and a resumed stream would die on it again and again.
+		// A new stream starts from now, so the changes made in between are never delivered and the cache
+		// has to be resynced with the db
+		if stream = s.reopenStream(&attempt); stream == nil {
 			return
 		}
-		// changes made while the stream was down are lost, the cache must be resynced with the db
 		if s.resetReceiver != nil {
-			s.resetReceiver()
+			s.resetReceiver(s.streamCtx)
 		}
 	}
 }
 
 // reopenStream reopens the change stream, retrying until it succeeds. It returns nil if the service is closing.
-func (s *service) reopenStream() (stream *mongo.ChangeStream) {
-	var attempt int
+func (s *service) reopenStream(attempt *int) (stream *mongo.ChangeStream) {
 	for {
+		if !s.waitBeforeReconnect(*attempt) {
+			return nil
+		}
+		*attempt++
 		var err error
 		if stream, err = s.watchLog(s.streamCtx); err == nil {
 			log.Info("change stream is reconnected")
@@ -379,17 +404,34 @@ func (s *service) reopenStream() (stream *mongo.ChangeStream) {
 		if s.streamCtx.Err() != nil {
 			return nil
 		}
-		if attempt < maxReconnectWait {
-			attempt++
-		}
-		waitTime := time.Duration(attempt) * time.Second
-		log.Error("can't reopen change stream", zap.Error(err), zap.Duration("waitTime", waitTime))
-		select {
-		case <-time.After(waitTime):
-		case <-s.streamCtx.Done():
-			return nil
-		}
+		log.Error("can't reopen change stream", zap.Error(err))
 	}
+}
+
+// waitBeforeReconnect returns false if the service is closing
+func (s *service) waitBeforeReconnect(attempt int) bool {
+	waitTime := reconnectWait(attempt)
+	if waitTime == 0 {
+		return true
+	}
+	log.Debug("waiting before the next change stream reconnect", zap.Duration("waitTime", waitTime))
+	select {
+	case <-time.After(waitTime):
+		return true
+	case <-s.streamCtx.Done():
+		return false
+	}
+}
+
+// reconnectWait is a linear backoff: the first attempt is immediate, the following ones are capped
+func reconnectWait(attempt int) time.Duration {
+	if attempt <= 0 {
+		return 0
+	}
+	if wait := time.Duration(attempt) * time.Second; wait < maxReconnectWait {
+		return wait
+	}
+	return maxReconnectWait
 }
 
 func (s *service) SetDeletionId(ctx context.Context, lastId string) (err error) {
