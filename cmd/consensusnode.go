@@ -113,12 +113,16 @@ func Bootstrap(a *app.App) {
 		Register(coordinatorclient.New()).
 		Register(pool.New()).
 		Register(peerservice.New()).
-		Register(yamux.New()).
-		Register(quic.New()).
 		Register(secureservice.New()).
 		Register(server.New()).
 		Register(db.New()).
 		Register(stream.New()).
 		Register(consensusrpc.New()).
-		Register(deletelog.New())
+		Register(deletelog.New()).
+		// transports are registered last so that the node starts accepting
+		// connections only after all services are ready (components run in
+		// registration order); otherwise a peer can reach the db before Run
+		// has connected to mongo and crash on nil collections
+		Register(yamux.New()).
+		Register(quic.New())
 }
