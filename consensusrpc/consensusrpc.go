@@ -234,7 +234,8 @@ func (c *consensusRpc) checkRead(ctx context.Context) (err error) {
 		switch nodeType {
 		case nodeconf.NodeTypeCoordinator,
 			nodeconf.NodeTypeTree,
-			nodeconf.NodeTypeFile:
+			nodeconf.NodeTypeFile,
+			nodeconf.NodeTypeFileV2:
 			return nil
 		}
 	}
