@@ -4,7 +4,7 @@ go 1.25.7
 
 require (
 	github.com/ahmetb/govvv v0.3.0
-	github.com/anyproto/any-sync v0.13.0
+	github.com/anyproto/any-sync v0.13.1
 	github.com/cheggaaa/mb/v3 v3.0.3
 	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.17.9
@@ -32,14 +32,14 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
-	github.com/ipfs/boxo v0.42.0 // indirect
+	github.com/ipfs/boxo v0.42.1 // indirect
 	github.com/ipfs/go-block-format v0.2.4 // indirect
 	github.com/ipfs/go-cid v0.6.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/klauspost/compress v1.19.1 // indirect
-	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
-	github.com/libp2p/go-libp2p v0.48.1-0.20260709142922-ec408fcc60c9 // indirect
+	github.com/libp2p/go-libp2p v0.49.0 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/mr-tron/base58 v1.3.0 // indirect
