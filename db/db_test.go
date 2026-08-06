@@ -205,6 +205,66 @@ func TestService_ChangeReceive(t *testing.T) {
 	})
 }
 
+// TestService_StreamListener_Reconnect: an interrupted change stream must not take the listener down with it
+func TestService_StreamListener_Reconnect(t *testing.T) {
+	var (
+		logs   = make(chan consensus.Log, 10)
+		resets = make(chan struct{}, 10)
+	)
+	fx := newFixtureReset(t, func(logId string, records []consensus.Record) {
+		logs <- consensus.Log{Id: logId, Records: records}
+	}, func(ctx context.Context) {
+		resets <- struct{}{}
+	})
+	defer fx.Finish(t)
+
+	addLogWithRecord := func(logId string) {
+		require.NoError(t, fx.AddLog(ctx, consensus.Log{
+			Id:      logId,
+			Records: []consensus.Record{{Id: logId + "1", Payload: []byte("payload1")}},
+		}))
+		require.NoError(t, fx.AddRecord(ctx, logId, consensus.Record{
+			Id:      logId + "2",
+			PrevId:  logId + "1",
+			Payload: []byte("payload2"),
+		}))
+	}
+	expectChange := func(logId string) {
+		t.Helper()
+		select {
+		case l := <-logs:
+			assert.Equal(t, logId, l.Id)
+		case <-time.After(time.Second * 10):
+			t.Fatalf("no change received for %s", logId)
+		}
+	}
+
+	// the change stream delivers updates
+	addLogWithRecord("logBefore")
+	expectChange("logBefore")
+
+	// dropping the watched collection ends the change stream with an invalidate event
+	require.NoError(t, fx.Service.(*service).logColl.Drop(ctx))
+
+	// the listener must notice it, reopen the stream, and report that updates could have been missed
+	select {
+	case <-resets:
+	case <-time.After(time.Second * 10):
+		t.Fatal("the change stream was not reconnected")
+	}
+
+	// and it must keep delivering updates on the reopened stream
+	addLogWithRecord("logAfter")
+	expectChange("logAfter")
+}
+
+func TestReconnectWait(t *testing.T) {
+	assert.Equal(t, time.Duration(0), reconnectWait(0), "the first reconnect must be immediate")
+	assert.Equal(t, time.Second, reconnectWait(1))
+	assert.Equal(t, time.Second*2, reconnectWait(2))
+	assert.Equal(t, maxReconnectWait, reconnectWait(100), "the wait must be capped")
+}
+
 func TestService_SetDeletionId(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		fx := newFixture(t, nil)
@@ -268,6 +328,10 @@ func TestService_AddLog_ConcurrentOnFreshDB(t *testing.T) {
 }
 
 func newFixture(t *testing.T, cr ChangeReceiver) *fixture {
+	return newFixtureReset(t, cr, nil)
+}
+
+func newFixtureReset(t *testing.T, cr ChangeReceiver, rr ResetReceiver) *fixture {
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	fx := &fixture{
 		Service: New(),
@@ -277,6 +341,7 @@ func newFixture(t *testing.T, cr ChangeReceiver) *fixture {
 	fx.a.Register(&testConfig{})
 	fx.a.Register(fx.Service)
 	require.NoError(t, fx.Service.SetChangeReceiver(cr))
+	require.NoError(t, fx.Service.SetResetReceiver(rr))
 	err := fx.a.Start(ctx)
 	if err != nil {
 		fx.cancel()
