@@ -199,7 +199,7 @@ func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
 
 // consensusErr passes a consensus error on and replaces any other, such as a mongo error, with ErrUnexpected.
 // A transaction returns mongo errors as they are, so that tx can see their labels; the client needs the rpc code
-// of a consensus error, which a wrapped or joined error would not carry.
+// of a consensus error, which an error joined with a mongo error would not carry.
 func consensusErr(op string, err error) error {
 	if err == nil || drpcerr.Code(err) != 0 {
 		return err
@@ -213,7 +213,7 @@ type findLogQuery struct {
 }
 
 func (s *service) DeleteLog(ctx context.Context, logId string) (err error) {
-	return s.tx(ctx, func(txCtx mongo.SessionContext) error {
+	err = s.tx(ctx, func(txCtx mongo.SessionContext) error {
 		res, err := s.logColl.DeleteOne(txCtx, findLogQuery{Id: logId})
 		if err != nil {
 			return err
@@ -228,6 +228,7 @@ func (s *service) DeleteLog(ctx context.Context, logId string) (err error) {
 		}
 		return nil
 	})
+	return consensusErr("deleteLog", err)
 }
 
 type findRecordQuery struct {
