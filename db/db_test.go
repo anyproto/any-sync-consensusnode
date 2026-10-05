@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"storj.io/drpc/drpcerr"
 
 	consensus "github.com/anyproto/any-sync-consensusnode"
 )
@@ -330,4 +333,106 @@ func (c *testConfig) Name() string { return "config" }
 
 func (c *testConfig) GetDB() Config {
 	return Config{Connect: "mongodb://localhost:27017/?w=majority", Database: "consensus_test", LogCollection: "log"}
+}
+
+// TestService_AddLog_ConcurrentSameLog covers several nodes creating the same space log at once:
+// exactly one AddLog creates it, every other one reports ErrLogExists, never a WriteConflict.
+func TestService_AddLog_ConcurrentSameLog(t *testing.T) {
+	fx := newFixture(t, nil)
+	defer fx.Finish(t)
+
+	const rounds, n = 20, 5
+	for r := range rounds {
+		logId := fmt.Sprintf("same-log-%d", r)
+		errs := make(chan error, n)
+		for range n {
+			go func() {
+				errs <- fx.AddLog(ctx, consensus.Log{
+					Id:      logId,
+					Records: []consensus.Record{{Id: logId + "-root", Payload: []byte("root")}},
+				})
+			}()
+		}
+		// collect every result before asserting, so that no AddLog runs during the fixture teardown
+		results := make([]error, 0, n)
+		for range n {
+			results = append(results, <-errs)
+		}
+		var created int
+		for _, err := range results {
+			if err == nil {
+				created++
+				continue
+			}
+			assert.ErrorIs(t, err, consensuserr.ErrLogExists, "round %d", r)
+		}
+		assert.Equal(t, 1, created, "round %d", r)
+	}
+}
+
+func TestService_tx(t *testing.T) {
+	transient := mongo.CommandError{Code: 112, Name: "WriteConflict", Labels: []string{transientTxErrorLabel}}
+
+	// failing returns a transaction body that fails with err the given number of times, then succeeds
+	failing := func(times int, err error) (func(mongo.SessionContext) error, *int) {
+		var calls int
+		return func(mongo.SessionContext) error {
+			calls++
+			if calls <= times {
+				return err
+			}
+			return nil
+		}, &calls
+	}
+
+	t.Run("a transient error is retried", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+		f, calls := failing(2, transient)
+		require.NoError(t, fx.Service.(*service).tx(ctx, f))
+		assert.Equal(t, 3, *calls)
+	})
+	t.Run("a wrapped transient error is retried", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+		f, calls := failing(1, fmt.Errorf("insert: %w", transient))
+		require.NoError(t, fx.Service.(*service).tx(ctx, f))
+		assert.Equal(t, 2, *calls)
+	})
+	t.Run("retries stop after txMaxAttempts", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+		f, calls := failing(txMaxAttempts, transient)
+		err := fx.Service.(*service).tx(ctx, f)
+		assert.True(t, isTransientTxError(err))
+		assert.Equal(t, txMaxAttempts, *calls)
+	})
+	t.Run("another error is not retried", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		defer fx.Finish(t)
+		f, calls := failing(1, consensuserr.ErrConflict)
+		assert.ErrorIs(t, fx.Service.(*service).tx(ctx, f), consensuserr.ErrConflict)
+		assert.Equal(t, 1, *calls)
+	})
+}
+
+func TestService_AddLog_KeepsInput(t *testing.T) {
+	fx := newFixture(t, nil)
+	defer fx.Finish(t)
+	l := consensus.Log{Id: "logOne", Records: []consensus.Record{{Id: "recordOne", Payload: []byte("payload")}}}
+	require.NoError(t, fx.AddLog(ctx, l))
+	// a retried transaction saves the payloads again
+	assert.Equal(t, []byte("payload"), l.Records[0].Payload)
+}
+
+func TestConsensusErr(t *testing.T) {
+	assert.NoError(t, consensusErr("op", nil))
+	for _, err := range []error{consensuserr.ErrLogExists, consensuserr.ErrConflict, consensuserr.ErrUnexpected} {
+		assert.Equal(t, err, consensusErr("op", err))
+	}
+	// a mongo error reaches the client as ErrUnexpected, with its rpc code
+	err := consensusErr("op", errors.Join(errors.New("context"), mongo.CommandError{Code: 112, Name: "WriteConflict"}))
+	assert.Equal(t, consensuserr.ErrUnexpected, err)
+	assert.Equal(t, drpcerr.Code(consensuserr.ErrUnexpected), drpcerr.Code(err))
+	assert.NotZero(t, drpcerr.Code(err))
 }
