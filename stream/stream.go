@@ -63,6 +63,10 @@ func (s *Stream) WatchIds(ctx context.Context, logIds []string) {
 	for _, logId := range newIds {
 		if addErr := s.s.AddStream(ctx, logId, s); addErr != nil {
 			log.Info("can't add stream for log", zap.String("logId", logId), zap.Error(addErr))
+			// the stream is not attached to the log, so the id is not watched: a later WatchIds tries again
+			s.mu.Lock()
+			delete(s.logIds, logId)
+			s.mu.Unlock()
 			_ = s.mb.Add(ctx, consensus.Log{
 				Id:  logId,
 				Err: addErr,

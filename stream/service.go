@@ -2,12 +2,14 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
 	"github.com/anyproto/any-sync/app"
 	"github.com/anyproto/any-sync/app/logger"
 	"github.com/anyproto/any-sync/app/ocache"
+	"github.com/anyproto/any-sync/consensus/consensusproto/consensuserr"
 	"github.com/anyproto/any-sync/metric"
 	"github.com/cheggaaa/mb/v3"
 	"go.uber.org/zap"
@@ -84,6 +86,12 @@ func (s *service) NewStream() *Stream {
 // AddStream to object with given logId
 func (s *service) AddStream(ctx context.Context, logId string, stream *Stream) (err error) {
 	obj, err := s.getObject(ctx, logId)
+	if errors.Is(err, consensuserr.ErrLogNotFound) {
+		// A node watches a log right after creating it. The lookup can join a load that another watch started
+		// before the log was committed and share its ErrLogNotFound; a failed load leaves the cache, so a second
+		// lookup reads the db again.
+		obj, err = s.getObject(ctx, logId)
+	}
 	if err != nil {
 		return err
 	}
