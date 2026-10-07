@@ -426,12 +426,12 @@ func TestService_AddLog_KeepsInput(t *testing.T) {
 }
 
 func TestConsensusErr(t *testing.T) {
-	assert.NoError(t, consensusErr("op", nil))
+	assert.NoError(t, consensusErr("op", "logId", nil))
 	for _, err := range []error{consensuserr.ErrLogExists, consensuserr.ErrConflict, consensuserr.ErrUnexpected} {
-		assert.Equal(t, err, consensusErr("op", err))
+		assert.Equal(t, err, consensusErr("op", "logId", err))
 	}
 	// a mongo error reaches the client as ErrUnexpected, with its rpc code
-	err := consensusErr("op", errors.Join(errors.New("context"), mongo.CommandError{Code: 112, Name: "WriteConflict"}))
+	err := consensusErr("op", "logId", errors.Join(errors.New("context"), mongo.CommandError{Code: 112, Name: "WriteConflict"}))
 	assert.Equal(t, consensuserr.ErrUnexpected, err)
 	assert.Equal(t, drpcerr.Code(consensuserr.ErrUnexpected), drpcerr.Code(err))
 	assert.NotZero(t, drpcerr.Code(err))

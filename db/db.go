@@ -194,17 +194,17 @@ func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
 		}
 		return err
 	})
-	return consensusErr("addLog", err)
+	return consensusErr("addLog", l.Id, err)
 }
 
 // consensusErr passes a consensus error on and replaces any other, such as a mongo error, with ErrUnexpected.
 // A transaction returns mongo errors as they are, so that tx can see their labels; the client needs the rpc code
 // of a consensus error, which an error joined with a mongo error would not carry.
-func consensusErr(op string, err error) error {
+func consensusErr(op, logId string, err error) error {
 	if err == nil || drpcerr.Code(err) != 0 {
 		return err
 	}
-	log.Error(op+" error", zap.Error(err))
+	log.Error(op+" error", zap.String("logId", logId), zap.Error(err))
 	return consensuserr.ErrUnexpected
 }
 
@@ -228,7 +228,7 @@ func (s *service) DeleteLog(ctx context.Context, logId string) (err error) {
 		}
 		return nil
 	})
-	return consensusErr("deleteLog", err)
+	return consensusErr("deleteLog", logId, err)
 }
 
 type findRecordQuery struct {
@@ -271,7 +271,7 @@ func (s *service) AddRecord(ctx context.Context, logId string, record consensus.
 		}
 		return
 	})
-	return consensusErr("addRecord", err)
+	return consensusErr("addRecord", logId, err)
 }
 
 func (s *service) savePayload(ctx context.Context, payload consensus.Payload) (err error) {
