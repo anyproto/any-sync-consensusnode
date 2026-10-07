@@ -17,6 +17,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readconcern"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.uber.org/zap"
+	"storj.io/drpc/drpcerr"
 
 	consensus "github.com/anyproto/any-sync-consensusnode"
 )
@@ -128,7 +129,33 @@ func (s *service) ensureCollections(ctx context.Context, db *mongo.Database) err
 	return nil
 }
 
+const (
+	// txMaxAttempts bounds how many times a transaction that failed with a transient error is run again
+	txMaxAttempts = 10
+	// txRetryDelay is the wait before the second attempt; it grows linearly with each attempt
+	txRetryDelay = 10 * time.Millisecond
+	// transientTxErrorLabel marks an error after which the whole transaction can be run again,
+	// such as a WriteConflict with a concurrent transaction on the same document
+	transientTxErrorLabel = "TransientTransactionError"
+)
+
+// tx runs f in a transaction. A transaction that fails with a transient error is run again from the start,
+// so f must not depend on state an earlier attempt changed.
 func (s *service) tx(ctx context.Context, f func(txCtx mongo.SessionContext) error) (err error) {
+	for attempt := 1; ; attempt++ {
+		err = s.txOnce(ctx, f)
+		if err == nil || attempt == txMaxAttempts || !isTransientTxError(err) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(time.Duration(attempt) * txRetryDelay):
+		}
+	}
+}
+
+func (s *service) txOnce(ctx context.Context, f func(txCtx mongo.SessionContext) error) (err error) {
 	return s.client.UseSessionWithOptions(
 		ctx,
 		options.Session().SetDefaultReadConcern(readconcern.Majority()),
@@ -144,24 +171,41 @@ func (s *service) tx(ctx context.Context, f func(txCtx mongo.SessionContext) err
 		})
 }
 
+// isTransientTxError reports whether err carries the transient transaction label, also when err wraps it
+func isTransientTxError(err error) bool {
+	var labeled mongo.LabeledError
+	return errors.As(err, &labeled) && labeled.HasErrorLabel(transientTxErrorLabel)
+}
+
 func (s *service) AddLog(ctx context.Context, l consensus.Log) (err error) {
-	return s.tx(ctx, func(txCtx mongo.SessionContext) error {
+	err = s.tx(ctx, func(txCtx mongo.SessionContext) error {
+		// the log is stored without payloads; a retried transaction needs them again, so l stays intact
+		stored := consensus.Log{Id: l.Id, Records: make([]consensus.Record, len(l.Records))}
 		for i, record := range l.Records {
 			if err := s.savePayload(txCtx, consensus.NewPayload(l.Id, record.Id, record.Payload)); err != nil {
 				return err
 			}
-			l.Records[i].Payload = nil
+			record.Payload = nil
+			stored.Records[i] = record
 		}
-		_, err := s.logColl.InsertOne(txCtx, l)
-		if err != nil {
-			if mongo.IsDuplicateKeyError(err) {
-				return consensuserr.ErrLogExists
-			} else {
-				return errors.Join(consensuserr.ErrUnexpected, err)
-			}
+		_, err := s.logColl.InsertOne(txCtx, stored)
+		if mongo.IsDuplicateKeyError(err) {
+			return consensuserr.ErrLogExists
 		}
-		return nil
+		return err
 	})
+	return consensusErr("addLog", l.Id, err)
+}
+
+// consensusErr passes a consensus error on and replaces any other, such as a mongo error, with ErrUnexpected.
+// A transaction returns mongo errors as they are, so that tx can see their labels; the client needs the rpc code
+// of a consensus error, which an error joined with a mongo error would not carry.
+func consensusErr(op, logId string, err error) error {
+	if err == nil || drpcerr.Code(err) != 0 {
+		return err
+	}
+	log.Error(op+" error", zap.String("logId", logId), zap.Error(err))
+	return consensuserr.ErrUnexpected
 }
 
 type findLogQuery struct {
@@ -169,7 +213,7 @@ type findLogQuery struct {
 }
 
 func (s *service) DeleteLog(ctx context.Context, logId string) (err error) {
-	return s.tx(ctx, func(txCtx mongo.SessionContext) error {
+	err = s.tx(ctx, func(txCtx mongo.SessionContext) error {
 		res, err := s.logColl.DeleteOne(txCtx, findLogQuery{Id: logId})
 		if err != nil {
 			return err
@@ -184,6 +228,7 @@ func (s *service) DeleteLog(ctx context.Context, logId string) (err error) {
 		}
 		return nil
 	})
+	return consensusErr("deleteLog", logId, err)
 }
 
 type findRecordQuery struct {
@@ -201,23 +246,23 @@ type updateOp struct {
 }
 
 func (s *service) AddRecord(ctx context.Context, logId string, record consensus.Record) error {
-	return s.tx(ctx, func(txCtx mongo.SessionContext) (err error) {
+	err := s.tx(ctx, func(txCtx mongo.SessionContext) (err error) {
 		// save payload in a separate collection to avoid the one doc size limit
 		if err = s.savePayload(txCtx, consensus.NewPayload(logId, record.Id, record.Payload)); err != nil {
 			return err
 		}
 
-		// try to add record to the log
+		// try to add record to the log; the stored record goes without its payload, and record stays intact
+		// for a retried transaction
 		var upd updateOp
-		record.Payload = nil
-		upd.Push.Records.Each = []consensus.Record{record}
+		stored := record
+		stored.Payload = nil
+		upd.Push.Records.Each = []consensus.Record{stored}
 		result, err := s.logColl.UpdateOne(txCtx, findRecordQuery{
 			Id:           logId,
 			LastRecordId: record.PrevId,
 		}, upd)
 		if err != nil {
-			log.Error("addRecord update error", zap.Error(err))
-			err = consensuserr.ErrUnexpected
 			return
 		}
 		if result.ModifiedCount == 0 {
@@ -226,6 +271,7 @@ func (s *service) AddRecord(ctx context.Context, logId string, record consensus.
 		}
 		return
 	})
+	return consensusErr("addRecord", logId, err)
 }
 
 func (s *service) savePayload(ctx context.Context, payload consensus.Payload) (err error) {
