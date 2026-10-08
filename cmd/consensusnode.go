@@ -105,8 +105,13 @@ func main() {
 }
 
 func Bootstrap(a *app.App) {
+	// Components run in registration order, and a peer can send requests that reach the db as soon as
+	// the node is connected to it. db runs before anything that dials (nodeconf syncs with the coordinator
+	// right away, and an outgoing connection accepts streams too), and the transports run last, so that
+	// no request finds the db before Run has connected to mongo.
 	a.Register(metric.New()).
 		Register(account.New()).
+		Register(db.New()).
 		Register(nodeconf.New()).
 		Register(nodeconfstore.New()).
 		Register(nodeconfsource.New()).
@@ -115,14 +120,9 @@ func Bootstrap(a *app.App) {
 		Register(peerservice.New()).
 		Register(secureservice.New()).
 		Register(server.New()).
-		Register(db.New()).
 		Register(stream.New()).
 		Register(consensusrpc.New()).
 		Register(deletelog.New()).
-		// transports are registered last so that the node starts accepting
-		// connections only after all services are ready (components run in
-		// registration order); otherwise a peer can reach the db before Run
-		// has connected to mongo and crash on nil collections
 		Register(yamux.New()).
 		Register(quic.New())
 }
